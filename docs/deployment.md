@@ -24,57 +24,21 @@ the `pgboss` schema of the same database.
 ## Docker Compose
 
 [`compose.yaml`](../compose.yaml) runs `migrate`, `web`, and `worker`
-against the PostgreSQL in `DATABASE_URL`. Take it from the release you deploy,
-together with `.env.example` as the start of your `.env`:
-
-```sh
-version=0.2.0   # replace with the Logbook release to deploy
-curl -fsSLO "https://raw.githubusercontent.com/meldgrove/logbook/v$version/compose.yaml"
-curl -fsSL -o .env "https://raw.githubusercontent.com/meldgrove/logbook/v$version/.env.example"
-# Edit .env with the production values (docs/configuration.md): at least
-# DATABASE_URL, LOGBOOK_BASE_URL, BETTER_AUTH_SECRET, the OIDC_* variables,
-# and DIRECTORY with its settings. Remove NOTIFICATION_TRANSPORT (production
-# sends for real). Add the release:
-#   LOGBOOK_VERSION=0.2.0   # use the same version as above
-docker compose up -d
-```
+against the PostgreSQL in `DATABASE_URL`, and the optional `updater`
+([automatic updates](#automatic-updates)). Run it on [Coolify](#coolify) or
+on a [Debian server](#debian) (Debian 12 or later, or a similar system with
+systemd and apt, such as Ubuntu 24.04). Both take `compose.yaml` from the
+branch `stable`, which is at the newest release; `main` has changes that are
+not released yet.
 
 `LOGBOOK_VERSION` is required: Compose stops with a message without it.
 
-On a platform that runs Compose files, create the PostgreSQL there and set
-`DATABASE_URL` to its internal URL. Some platforms start each Compose project
-in a network of its own, where that host name does not resolve (`migrate` logs
-`getaddrinfo EAI_AGAIN` and fails after a minute): connect the application to
-the network the database is in. Platforms that pass their one Compose file
-with `-f` override `COMPOSE_FILE`, so `compose.postgres.yaml` does not work
-there. A platform that reads `compose.yaml` from this repository should
-follow the branch `stable`, which is at the newest release; `main` has
-changes that are not released yet.
-
-Put a reverse proxy that terminates TLS in front of `web` and use its public
-URL as `LOGBOOK_BASE_URL`. Use exactly that URL: login redirects and links in
-messages are built from it.
+Put a reverse proxy that terminates TLS in front of `web` (Coolify's own, or
+Caddy on Debian) and use its public URL as `LOGBOOK_BASE_URL`. Use exactly
+that URL: login redirects and links in messages are built from it.
 
 Set `TZ` to your organization's time zone (default UTC): deadlines end at
 23:59, and reminders go out at 09:00, in that zone.
-
-### PostgreSQL next to Logbook
-
-On a server without a PostgreSQL of its own,
-[`compose.postgres.yaml`](../compose.postgres.yaml) (from the same release)
-adds one to the Compose project and keeps its data in the `postgres-data` volume. Set these values in
-`.env`; `COMPOSE_FILE` makes every `docker compose` command use both files:
-
-```sh
-COMPOSE_FILE=compose.yaml:compose.postgres.yaml
-# openssl rand -hex 32: no characters that would need escaping in the URL
-POSTGRES_PASSWORD=<password>
-DATABASE_URL=postgres://logbook:<password>@postgres:5432/logbook
-```
-
-PostgreSQL uses `POSTGRES_USER`, `POSTGRES_DB` (both default to `logbook`),
-and `POSTGRES_PASSWORD` when it initializes the volume. For an existing
-volume, set them to the role, database, and password already in use.
 
 ### Upgrading from Logbuch
 
@@ -118,6 +82,94 @@ docker build -t ghcr.io/meldgrove/logbook:local .
 docker compose up -d
 ```
 
+## Coolify
+
+1. **Database:** create a PostgreSQL 18 resource and copy its internal URL.
+   `compose.postgres.yaml` does not work on Coolify: it passes its one
+   Compose file with `-f`, which overrides `COMPOSE_FILE`.
+2. **Application:** create a Docker Compose resource from the public
+   repository `https://github.com/meldgrove/logbook`, branch `stable`,
+   Docker Compose location `/compose.yaml`. Under Advanced, set Auto deploy
+   to "Manual deployments only", so that only releases deploy, and turn on
+   "Connect To Predefined Network", so that Logbook reaches the database.
+   Without it, `migrate` logs `getaddrinfo EAI_AGAIN` and fails after a
+   minute.
+3. **Domain:** assign the domain, such as `https://logbook.example.org`, to
+   `web`, port 3000.
+4. **Register Logbook at your provider** with the redirect URI
+   `<LOGBOOK_BASE_URL>/api/auth/callback/oidc`
+   ([identity and access](identity-and-access.md#openid-connect-login)).
+5. **Environment variables** of the resource
+   ([configuration](configuration.md)): `LOGBOOK_VERSION` (a series such as
+   `0.2`, see [automatic updates](#automatic-updates)), `LOGBOOK_BASE_URL`
+   (the domain), `DATABASE_URL` (the database's internal URL), a new
+   `BETTER_AUTH_SECRET` (`openssl rand -base64 32`), the `OIDC_*` variables,
+   and `DIRECTORY` with its settings.
+6. **Deploy**, open `LOGBOOK_BASE_URL`, sign in, and set up people and teams
+   ([manual directory](identity-and-access.md#manual-directory) or
+   [Keycloak directory](identity-and-access.md#keycloak-directory)).
+7. **Automatic updates:** set them up [on Coolify](#on-coolify).
+
+## Debian
+
+On a server with Debian 12 or later, or a similar system such as Ubuntu,
+run the commands as root (`sudo -i`).
+
+1. **Docker:** install Docker Engine and the Compose plugin from Docker's
+   apt repository ([Debian](https://docs.docker.com/engine/install/debian/),
+   [Ubuntu](https://docs.docker.com/engine/install/ubuntu/)), and Git:
+   `apt install git`.
+2. **Get the files** at the newest release:
+
+   ```sh
+   git clone --branch stable https://github.com/meldgrove/logbook.git /srv/logbook
+   cd /srv/logbook
+   ```
+
+3. **Register Logbook at your provider** with the redirect URI
+   `<LOGBOOK_BASE_URL>/api/auth/callback/oidc`
+   ([identity and access](identity-and-access.md#openid-connect-login)).
+4. **Create `.env`** from `.env.example` (`cp .env.example .env`,
+   `chmod 600 .env`) and set the production values
+   ([configuration](configuration.md)): `LOGBOOK_VERSION` (a series such as
+   `0.2`), `LOGBOOK_BASE_URL`, `DATABASE_URL`, a new `BETTER_AUTH_SECRET`
+   (`openssl rand -base64 32`), the `OIDC_*` variables, and `DIRECTORY` with
+   its settings. Remove `NOTIFICATION_TRANSPORT` (production sends for real).
+
+   Without a PostgreSQL of your own, set these values for the database.
+   `COMPOSE_FILE` makes every `docker compose` command also use
+   [`compose.postgres.yaml`](../compose.postgres.yaml), which runs PostgreSQL
+   18 next to Logbook and keeps its data in the volume `postgres-data`:
+
+   ```sh
+   COMPOSE_FILE=compose.yaml:compose.postgres.yaml
+   # openssl rand -hex 32: no characters that would need escaping in the URL
+   POSTGRES_PASSWORD=<password>
+   DATABASE_URL=postgres://logbook:<password>@postgres:5432/logbook
+   ```
+
+   PostgreSQL uses `POSTGRES_USER`, `POSTGRES_DB` (both default to
+   `logbook`), and `POSTGRES_PASSWORD` when it initializes the volume. For an
+   existing volume, set them to the role, database, and password already in
+   use.
+
+5. **Start:** `docker compose up -d --pull always`.
+6. **HTTPS:** point the domain's DNS at the server, install Caddy
+   (`apt install caddy`), and replace `/etc/caddy/Caddyfile` with:
+
+   ```text
+   logbook.example.org {
+       reverse_proxy 127.0.0.1:3000
+   }
+   ```
+
+   Then `systemctl reload caddy`. Caddy gets the certificate itself.
+
+7. Open `LOGBOOK_BASE_URL`, sign in, and set up people and teams
+   ([manual directory](identity-and-access.md#manual-directory) or
+   [Keycloak directory](identity-and-access.md#keycloak-directory)).
+8. **Automatic updates:** set them up [on Debian](#on-debian).
+
 ## Health checks
 
 | Endpoint | Meaning |
@@ -138,54 +190,73 @@ admin page shows the worker's last heartbeat.
 - **Admin page** (`/admin`): directory sync status, notification channels and
   failures, webhook deliveries, and the default periods of the decision
   process.
-- **Upgrades**: read the release notes of every release since yours, set
-  `LOGBOOK_VERSION` to the new release, and run `docker compose up -d`. For a
-  new series, take its `compose.yaml` too. `migrate` applies new migrations
-  before `web` and `worker` start. Back up the database first: migrations
-  only move forward.
+- **Upgrades**: read the release notes of every release since yours and
+  take their steps. Back up the database first: migrations only move
+  forward. `migrate` applies new migrations before `web` and `worker` start.
+  - **Coolify:** set `LOGBOOK_VERSION` to the new release in the resource's
+    environment variables and redeploy. Coolify reads `compose.yaml` from
+    `stable`, which is at the newest release.
+  - **Debian:** in `/srv/logbook`, run `git pull` (the newest release's
+    `compose.yaml`), set `LOGBOOK_VERSION` in `.env`, and run
+    `docker compose up -d --pull always`.
 
 ## Automatic updates
 
 `compose.yaml` includes the `updater` service of
 [Meldgrove Updater](https://github.com/meldgrove/updater). Once an hour it
 checks whether the tag in `LOGBOOK_VERSION` points to a new image. If so, it
-calls the deploy link of the platform, which pulls the image and restarts
-Logbook, `migrate` first. Until `UPDATE_DEPLOY_HOOK_URL` is set, it does
-nothing.
+calls Coolify's deploy link or asks the server, which pulls the image and
+restarts Logbook, `migrate` first. Until it is set up
+[on Coolify](#on-coolify) or [on Debian](#on-debian), it does nothing.
 
-1. Set `LOGBOOK_VERSION` to a tag that moves:
-   - a series such as `0.2` (from 1.0.0 the major version, such as `1`):
-     every release of that series, with its features and fixes. None of them
-     needs manual steps. A release that does starts the next series: the
-     `updater` log then names it, and moving to it is an
-     [upgrade](#operations) by hand;
-   - `latest`: every release. A release with upgrade steps then installs
-     before anyone has taken them; watch the releases on GitHub (Watch →
-     Custom → Releases) and take the steps right away.
-2. Schedule database backups: migrations run without anyone watching.
-3. Set `UPDATE_DEPLOY_HOOK_URL` to the platform's deploy link, which must
-   redeploy on `POST`, and `UPDATE_DEPLOY_HOOK_TOKEN` to its bearer token if
-   it needs one. For Coolify, the updater's
-   [README](https://github.com/meldgrove/updater#coolify) shows where to find
-   both.
-4. Deploy once. The `updater` log then says which tag it watches.
+The tag in `LOGBOOK_VERSION` decides what installs:
 
-A deployment must pull the image again, or it starts the old one. Coolify
-pulls by itself. If the platform only starts the Compose file, set
-`PULL_POLICY=always`: Docker Compose then pulls the images on every start, so
-every `docker compose up` or `run` also brings the newest release of the tag.
-After the first automatic update, check that it arrived: `/-/healthz` reports
-the version.
+- a series such as `0.2` (from 1.0.0 the major version, such as `1`): every
+  release of that series, with its features and fixes. None of them needs
+  manual steps. A release that does starts the next series: the `updater`
+  log then names it, and moving to it is an [upgrade](#operations) by hand;
+- `latest`: every release. A release with upgrade steps then installs before
+  anyone has taken them; watch the releases on GitHub (Watch → Custom →
+  Releases) and take the steps right away.
+
+Schedule database backups first: migrations run without anyone watching.
 
 A release installs three days after it came out, so that a faulty one can be
 replaced before it reaches the server. `UPDATE_COOLDOWN` changes the time:
 `0` installs within the hour, `7d` waits a week. Security fixes wait as well;
-deploy by hand to install a release at once. Most platforms stop Logbook for
-a moment while they deploy: `UPDATE_WINDOW`, such as `02:00-05:00` in the
-time zone `TZ`, keeps that out of working hours.
+deploy by hand to install a release at once. A deployment stops Logbook for
+a moment: `UPDATE_WINDOW`, such as `02:00-05:00` in the time zone `TZ`,
+keeps that out of working hours. After the first automatic update, check
+that it arrived: `/-/healthz` reports the version.
 
-Without a platform, leave the deploy link empty and let cron run
-`docker compose up --detach --pull always --quiet-pull` every hour instead.
+### On Coolify
+
+1. Under Settings > Advanced, turn on API Access if it is off.
+2. Under Keys & Tokens > API Tokens, create a token with only the `deploy`
+   permission; clear `read`. Coolify shows it only once.
+3. In Logbook's resource, select Webhooks and copy Deploy Webhook.
+4. In the resource's environment variables, set `UPDATE_DEPLOY_HOOK_URL` to
+   the webhook and `UPDATE_DEPLOY_HOOK_TOKEN` to the token, then redeploy.
+
+The `updater` log then names the tag it watches.
+
+### On Debian
+
+As root in `/srv/logbook`, with `UPDATE_DEPLOY_HOOK_URL` empty:
+
+```sh
+docker compose up -d --pull always
+docker compose run --rm -T --pull always updater host-setup > updater-setup.sh
+sh updater-setup.sh
+```
+
+The first command starts the image the tag points to now, which the updater
+takes as installed. The second writes the setup script from the updater's
+image; read it before you run it. The script installs a systemd unit that
+waits for the updater's request, then pulls the new image and runs
+`docker compose up -d`, `migrate` first. `docker compose logs updater` names
+the tag it watches, and `journalctl -u meldgrove-updater-logbook.service`
+shows each installation. `sh updater-setup.sh remove` switches it off.
 
 ## Importing old entries from a CSV file
 
