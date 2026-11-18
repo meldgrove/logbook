@@ -24,7 +24,7 @@ turned on sends every entry.
   "entry": {
     "id": "0196f1e2-…",
     "ref": "LB-12",
-    "url": "https://logbuch.example.org/e/LB-12",
+    "url": "https://logbook.example.org/e/LB-12",
     "type": "decision",
     "status": "decided",
     "title": "Four-day week trial",
@@ -73,9 +73,12 @@ Every request has these headers:
 
 | Header | Value |
 |---|---|
-| `Logbuch-Timestamp` | Unix time in seconds when the request was sent |
-| `Logbuch-Signature` | `sha256=` and the hex HMAC-SHA256 of `<timestamp>.<raw body>`, keyed with `WEBHOOK_SECRET` |
-| `Logbuch-Delivery` | A random ID of this request |
+| `Logbook-Timestamp` | Unix time in seconds when the request was sent |
+| `Logbook-Signature` | `sha256=` and the hex HMAC-SHA256 of `<timestamp>.<raw body>`, keyed with `WEBHOOK_SECRET` |
+| `Logbook-Delivery` | A random ID of this request |
+
+Existing receivers can still read `Logbuch-Timestamp`, `Logbuch-Signature`,
+and `Logbuch-Delivery`. Both sets of headers carry the same values.
 
 Check the signature against the raw body before parsing it, compare in
 constant time, and reject old timestamps:
@@ -83,11 +86,11 @@ constant time, and reject old timestamps:
 ```js
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-function isFromLogbuch(rawBody, headers, secret) {
-  const timestamp = headers["logbuch-timestamp"];
+function isFromLogbook(rawBody, headers, secret) {
+  const timestamp = headers["logbook-timestamp"];
   if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
   const expected = `sha256=${createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex")}`;
-  const received = headers["logbuch-signature"] ?? "";
+  const received = headers["logbook-signature"] ?? "";
   return expected.length === received.length && timingSafeEqual(Buffer.from(expected), Buffer.from(received));
 }
 ```

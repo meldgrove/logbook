@@ -10,7 +10,7 @@ async function main() {
   validateWorkerConfig();
   const sync = getDirectory().sync;
   if (!sync) {
-    console.log("DIRECTORY=manual: people and teams are managed in Logbuch. There is nothing to sync.");
+    console.log("DIRECTORY=manual: people and teams are managed in Logbook. There is nothing to sync.");
     process.exit(0);
   }
   const result = await sync.run("manual");

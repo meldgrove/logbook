@@ -18,7 +18,7 @@ export async function signInAction(): Promise<void> {
 }
 
 /**
- * Ends the Logbuch session and then the identity provider's session
+ * Ends the Logbook session and then the identity provider's session
  * (RP-initiated logout with `id_token_hint`), so the next login asks for
  * credentials again.
  */
@@ -33,7 +33,7 @@ export async function signOutAction(): Promise<void> {
     });
     redirect(result.url ?? "/login");
   }
-  // No Logbuch session, for example after a denied login: end only the
+  // No Logbook session, for example after a denied login: end only the
   // identity provider's session, so the person can sign in with another
   // account. Providers without a logout endpoint keep their session.
   const config = getAuthConfig();
@@ -41,6 +41,6 @@ export async function signOutAction(): Promise<void> {
   if (!endSession) redirect("/login");
   const logoutUrl = new URL(endSession);
   logoutUrl.searchParams.set("client_id", config.OIDC_CLIENT_ID);
-  logoutUrl.searchParams.set("post_logout_redirect_uri", `${config.LOGBUCH_BASE_URL}/`);
+  logoutUrl.searchParams.set("post_logout_redirect_uri", `${config.LOGBOOK_BASE_URL}/`);
   redirect(logoutUrl.toString());
 }

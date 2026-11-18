@@ -2,7 +2,7 @@ import type { Database } from "@/lib/db/client";
 import type { Directory } from "@/lib/directory/directory";
 import { findPersonBySubject } from "@/lib/directory/queries";
 
-/** Error code the login flow uses when someone has no access to Logbuch. */
+/** Error code the login flow uses when someone has no access to Logbook. */
 export const NO_ACCESS_ERROR_CODE = "NO_ACCESS";
 
 export interface LoginAccessOptions {

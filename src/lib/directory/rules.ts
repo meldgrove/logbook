@@ -22,7 +22,7 @@ const LAST_ADMIN = "This is the last admin. Make someone else an admin first.";
 
 /**
  * Inviting people and creating, renaming, activating, or deactivating teams:
- * admins, in a directory managed in Logbuch. People and teams synced from
+ * admins, in a directory managed in Logbook. People and teams synced from
  * Keycloak earlier can be changed too, once the directory is manual.
  */
 export function directoryChange(directory: Pick<Directory, "editable">, actor: Actor): Check {

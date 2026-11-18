@@ -10,7 +10,7 @@ const LAST_ADMIN = "This is the last admin. Make someone else an admin first.";
 const allowed = (check: Check) => (check.ok ? "ok" : check.reason);
 
 describe("directoryChange", () => {
-  it("lets admins change people and teams only in a directory managed in Logbuch", () => {
+  it("lets admins change people and teams only in a directory managed in Logbook", () => {
     expect(directoryChange(MANUAL, admin)).toEqual({ ok: true });
     expect(directoryChange(MANUAL, member)).toEqual({ ok: false, reason: "Only admins can manage people and teams.", forbidden: true });
     expect(directoryChange(KEYCLOAK, admin)).toEqual({

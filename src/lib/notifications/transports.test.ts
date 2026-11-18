@@ -18,9 +18,9 @@ const fmt = createDateFormatter();
 
 describe("message formats", () => {
   it("link the title in Slack, escape control characters, and show the deadline", () => {
-    expect(slackText(MESSAGE, "https://logbuch.example/", fmt)).toBe(
+    expect(slackText(MESSAGE, "https://logbook.example/", fmt)).toBe(
       [
-        "*<https://logbuch.example/e/LB-12|LB-12 · Tools &lt;&amp; costs&gt;>*",
+        "*<https://logbook.example/e/LB-12|LB-12 · Tools &lt;&amp; costs&gt;>*",
         "Pia asks for your feedback.",
         "Feedback deadline: Friday, 06.11.2026, 23:59 (Europe/Amsterdam)",
       ].join("\n"),
@@ -29,8 +29,8 @@ describe("message formats", () => {
 
   it("write dates in the reader's format", () => {
     const message = { ...MESSAGE, text: `The deadline passed on ${dateToken("2026-11-06")}.` };
-    expect(slackText(message, "https://logbuch.example", createDateFormatter({ dateFormat: "MM/DD/YYYY" })).split("\n")).toEqual([
-      "*<https://logbuch.example/e/LB-12|LB-12 · Tools &lt;&amp; costs&gt;>*",
+    expect(slackText(message, "https://logbook.example", createDateFormatter({ dateFormat: "MM/DD/YYYY" })).split("\n")).toEqual([
+      "*<https://logbook.example/e/LB-12|LB-12 · Tools &lt;&amp; costs&gt;>*",
       "The deadline passed on Friday, 11/06/2026.",
       "Feedback deadline: Friday, 11/06/2026, 23:59 (Europe/Amsterdam)",
     ]);
@@ -38,9 +38,9 @@ describe("message formats", () => {
 
   it("show a channel post's summary as a quote, with type, impact, and affected teams", () => {
     const post = { type: "Decision", summary: "One tool <for all>.\nFrom March.", impact: "Medium", mustRead: false, affectedTeams: ["Ops", "Tech"] };
-    const text = slackText({ ...MESSAGE, deadline: undefined, post }, "https://logbuch.example", fmt);
+    const text = slackText({ ...MESSAGE, deadline: undefined, post }, "https://logbook.example", fmt);
     expect(text.split("\n")).toEqual([
-      "*<https://logbuch.example/e/LB-12|LB-12 · Tools &lt;&amp; costs&gt;>*",
+      "*<https://logbook.example/e/LB-12|LB-12 · Tools &lt;&amp; costs&gt;>*",
       "Pia asks for your feedback.",
       ">One tool &lt;for all&gt;.",
       ">From March.",
@@ -50,18 +50,18 @@ describe("message formats", () => {
 
   it("mark a Large entry as must read, and leave out empty affected teams", () => {
     const post = { type: "Update", summary: "Office closed.", impact: "Large", mustRead: true, affectedTeams: [] };
-    const text = slackText({ ...MESSAGE, deadline: undefined, post }, "https://logbuch.example", fmt);
-    expect(text.split("\n")[0]).toBe("*Must read* · *<https://logbuch.example/e/LB-12|LB-12 · Tools &lt;&amp; costs&gt;>*");
+    const text = slackText({ ...MESSAGE, deadline: undefined, post }, "https://logbook.example", fmt);
+    expect(text.split("\n")[0]).toBe("*Must read* · *<https://logbook.example/e/LB-12|LB-12 · Tools &lt;&amp; costs&gt;>*");
     expect(text.split("\n").at(-1)).toBe("Update · Impact: Large");
   });
 
   it("write emails in text and escaped HTML, without the proposal text", () => {
-    const email = emailContent(MESSAGE, "Ana <Admin>", "https://logbuch.example", fmt);
+    const email = emailContent(MESSAGE, "Ana <Admin>", "https://logbook.example", fmt);
     expect(email.subject).toBe(MESSAGE.subject);
     expect(email.text).toContain("Hello Ana <Admin>,\n\nPia asks for your feedback.\nFeedback deadline: Friday, 06.11.2026, 23:59 (Europe/Amsterdam)");
-    expect(email.text).toContain("https://logbuch.example/e/LB-12");
+    expect(email.text).toContain("https://logbook.example/e/LB-12");
     expect(email.html).toContain("Hello Ana &lt;Admin&gt;,");
-    expect(email.html).toContain('<a href="https://logbuch.example/e/LB-12">LB-12 · Tools &lt;&amp; costs&gt;</a>');
+    expect(email.html).toContain('<a href="https://logbook.example/e/LB-12">LB-12 · Tools &lt;&amp; costs&gt;</a>');
   });
 });
 
@@ -140,7 +140,7 @@ describe("Slack", () => {
 });
 
 describe("MailerSend", () => {
-  const options = { token: "mlsn.secret", from: "logbuch@example.org", fromName: "Logbuch" };
+  const options = { token: "mlsn.secret", from: "logbook@example.org", fromName: "Logbook" };
   const email = { to: "ana@example.org", toName: "Ana", subject: "S", text: "T", html: "<p>T</p>" };
 
   it("sends from the configured address", async () => {
@@ -149,7 +149,7 @@ describe("MailerSend", () => {
     expect(calls[0]!.url).toBe("https://api.mailersend.com/v1/email");
     expect(calls[0]!.init.headers).toMatchObject({ Authorization: "Bearer mlsn.secret" });
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
-      from: { email: "logbuch@example.org", name: "Logbuch" },
+      from: { email: "logbook@example.org", name: "Logbook" },
       to: [{ email: "ana@example.org", name: "Ana" }],
       subject: "S",
       text: "T",
@@ -185,7 +185,7 @@ describe("SMTP", () => {
   it("sends through the SMTP URL from the configured address", async () => {
     const sendMail = vi.fn(async () => ({ messageId: "1" }));
     const { createTransport, created } = fakeNodemailer(sendMail);
-    await createSmtpTransport({ url: "smtps://user:pass@mail.example.org:465", from: "logbuch@example.org", fromName: "Logbuch" }, createTransport).send(email);
+    await createSmtpTransport({ url: "smtps://user:pass@mail.example.org:465", from: "logbook@example.org", fromName: "Logbook" }, createTransport).send(email);
     expect(created[0]).toEqual({
       url: "smtps://user:pass@mail.example.org:465",
       connectionTimeout: 15_000,
@@ -193,7 +193,7 @@ describe("SMTP", () => {
       socketTimeout: 15_000,
     });
     expect(sendMail).toHaveBeenCalledWith({
-      from: { name: "Logbuch", address: "logbuch@example.org" },
+      from: { name: "Logbook", address: "logbook@example.org" },
       to: { name: "Ana", address: "ana@example.org" },
       subject: "S",
       text: "T",
@@ -204,7 +204,7 @@ describe("SMTP", () => {
   it("reports a rejected email with the server's reply code", async () => {
     const error = Object.assign(new Error("Mailbox unavailable"), { responseCode: 550, code: "EENVELOPE" });
     const { createTransport } = fakeNodemailer(async () => Promise.reject(error));
-    const transport = createSmtpTransport({ url: "smtp://mail.example.org", from: "logbuch@example.org", fromName: "Logbuch" }, createTransport);
+    const transport = createSmtpTransport({ url: "smtp://mail.example.org", from: "logbook@example.org", fromName: "Logbook" }, createTransport);
     await expect(transport.send(email)).rejects.toThrow(/SMTP 550: Mailbox unavailable/);
     await expect(transport.send(email)).rejects.toBeInstanceOf(DeliveryError);
   });
@@ -218,7 +218,7 @@ describe("SMTP", () => {
       Object.assign(new Error("Connection timeout"), { code: "ETIMEDOUT" }),
     ];
     const { createTransport } = fakeNodemailer(async () => Promise.reject(errors.shift()));
-    const transport = createSmtpTransport({ url: "smtp://mail.example.org", from: "logbuch@example.org", fromName: "Logbuch" }, createTransport);
+    const transport = createSmtpTransport({ url: "smtp://mail.example.org", from: "logbook@example.org", fromName: "Logbook" }, createTransport);
     const permanent = async () => ((await transport.send(email).catch((error: unknown) => error)) as DeliveryError).permanent;
     expect([await permanent(), await permanent(), await permanent(), await permanent(), await permanent()]).toEqual([true, true, true, false, false]);
   });

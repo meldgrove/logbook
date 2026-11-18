@@ -13,7 +13,7 @@ export interface NotificationMessage {
   /** What happened and what the recipient should do. */
   text: string;
   deadline?: { label: string; date: string };
-  /** Path in Logbuch, e.g. "/e/LB-12". The worker adds the base URL. */
+  /** Path in Logbook, e.g. "/e/LB-12". The worker adds the base URL. */
   path: string;
   /** Posts to the Slack channel: what the entry is about. */
   post?: ChannelPost;

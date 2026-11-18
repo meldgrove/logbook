@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const securityHeaders = [
-  // HTTPS only on this host. No includeSubDomains: Logbuch does not know the
+  // HTTPS only on this host. No includeSubDomains: Logbook does not know the
   // other hosts of its domain, and a browser would hold them to HTTPS for the
   // whole max-age.
   { key: "Strict-Transport-Security", value: "max-age=63072000" },

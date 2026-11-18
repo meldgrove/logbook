@@ -3,7 +3,7 @@ import { workingDaysBetween } from "@/lib/calendar";
 /*
  * Usage statistics by month, in the server's time zone:
  * proposals started, how many of them are finished, median working days from
- * submission to decision, and people who opened Logbuch.
+ * submission to decision, and people who opened Logbook.
  */
 
 export interface ProposalFacts {
@@ -26,7 +26,7 @@ export interface MonthMeasures {
   decisions: { two_way: number; one_way: number };
   /** Updates, learnings, and decisions logged directly, published this month. */
   published: { updates: number; learnings: number; decisions: number };
-  /** People who opened Logbuch this month; null before activity was recorded. */
+  /** People who opened Logbook this month; null before activity was recorded. */
   activePeople: number | null;
   /** The day activity recording started, when that was during this month. */
   activeFrom: string | null;

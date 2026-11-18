@@ -32,14 +32,14 @@ const config = (overrides: Partial<WebhookConfig> = {}): WebhookConfig => ({
   WEBHOOK_SECRET: undefined,
   ...overrides,
 });
-const options = { baseUrl: "https://logbuch.example", db: () => ({}) as Database };
+const options = { baseUrl: "https://logbook.example", db: () => ({}) as Database };
 
 describe("webhook jobs in the worker", () => {
   it("schedule the minute sync and the nightly run, and reconcile once at startup", async () => {
     const { boss, calls } = fakeBoss();
     const mode = await setUpWebhookJobs(boss, {
       ...options,
-      config: config({ WEBHOOK_URL: "https://hooks.example.org/logbuch", WEBHOOK_SECRET: "s".repeat(32) }),
+      config: config({ WEBHOOK_URL: "https://hooks.example.org/logbook", WEBHOOK_SECRET: "s".repeat(32) }),
     });
     expect(mode).toBe("live");
     expect(calls).toEqual([

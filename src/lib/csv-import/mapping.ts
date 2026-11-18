@@ -24,8 +24,8 @@ import { clipText } from "@/lib/format";
 /*
  * Import of old entries from a CSV file, as pure functions:
  * one row to the input of `logDecision` or `createNote`. The columns are
- * Logbuch's own (see docs/entry-import-template.csv); the file can come from
- * any earlier log. Logbuch has no connection to the old systems.
+ * Logbook's own (see docs/entry-import-template.csv); the file can come from
+ * any earlier log. Logbook has no connection to the old systems.
  */
 
 /** The columns, in template order. `decided_on` is the old name of `date`. */
@@ -264,12 +264,12 @@ export function mapRow(row: Record<string, string>, ctx: MappingContext): Mapped
     if (!ctx.fallbackDecider) {
       return fail(
         deciderEmail
-          ? `${row.decider_email} has no Logbuch access. Pass --fallback-decider to import it anyway.`
+          ? `${row.decider_email} has no Logbook access. Pass --fallback-decider to import it anyway.`
           : "decider_email is empty. Pass --fallback-decider to import it anyway.",
       );
     }
     decider = ctx.fallbackDecider;
-    notes.push(`Decider: ${decider.name} (${row.decider_email || "no decider_email"} has no Logbuch access).`);
+    notes.push(`Decider: ${decider.name} (${row.decider_email || "no decider_email"} has no Logbook access).`);
   }
 
   const involved: Person[] = [];
@@ -277,7 +277,7 @@ export function mapRow(row: Record<string, string>, ctx: MappingContext): Mapped
     const found = ctx.peopleByEmail.get(email.toLowerCase());
     if (found) {
       if (found.id !== decider.id) involved.push(found);
-    } else notes.push(`${email} has no Logbuch access and is not listed as involved.`);
+    } else notes.push(`${email} has no Logbook access and is not listed as involved.`);
   }
 
   const decisionText = row.decision_text || title;

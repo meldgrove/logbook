@@ -16,7 +16,7 @@ export const ACTIVITY_SINCE_KEY = "activity_tracking_since";
 const recorded = new Set<string>();
 
 /**
- * Notes that a person opened Logbuch this month. Writes at
+ * Notes that a person opened Logbook this month. Writes at
  * most once per person and month in each process. The database gives up
  * after a short wait, so a lock never holds up a page; a failed write is
  * logged and never fails the request.

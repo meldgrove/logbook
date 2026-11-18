@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 /**
  * Renders entry Markdown (GitHub flavor). Raw HTML is never rendered, and
  * react-markdown drops unsafe link protocols. Images show as links: the
- * Content Security Policy only allows images from Logbuch itself.
+ * Content Security Policy only allows images from Logbook itself.
  */
 export function Markdown({ children, className }: { children: string; className?: string }) {
   return (

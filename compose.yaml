@@ -1,28 +1,28 @@
-# Logbuch in production: one image, three services, and the PostgreSQL 18 in
+# Logbook in production: one image, three services, and the PostgreSQL 18 in
 # DATABASE_URL.
 #
 #   cp .env.example .env    # then set the production values, see docs/configuration.md
 #   docker compose up -d
 #
-# LOGBUCH_VERSION in .env selects the release of ghcr.io/meldgrove/logbuch,
-# e.g. 0.1.0. To upgrade, read the release notes, change it, and run
-# `docker compose up -d` again. A tag that moves (0.1, latest) lets `updater`
+# LOGBOOK_VERSION in .env selects the release of ghcr.io/meldgrove/logbook,
+# e.g. 0.2.0. To upgrade, read the release notes, change it, and run
+# `docker compose up -d` again. A tag that moves (0.2, latest) lets `updater`
 # install new releases (docs/deployment.md, Automatic updates). On a
 # platform that does not pull images when it deploys, PULL_POLICY=always
 # makes every start pull them again.
 #
 # Without a PostgreSQL of your own, add compose.postgres.yaml: it runs one
-# next to Logbuch (docs/deployment.md).
+# next to Logbook (docs/deployment.md).
 #
 # Put a TLS-terminating reverse proxy in front of `web` (port 3000) and set
-# LOGBUCH_BASE_URL to its public URL. `migrate` runs once before `web` and
+# LOGBOOK_BASE_URL to its public URL. `migrate` runs once before `web` and
 # `worker` start. Platforms that run Compose files can use this file as it
 # is; set the variables in their environment view. A platform that reads the
 # file from the repository follows the branch `stable`, which is at the
 # newest release; `main` has unreleased changes.
 # Local development uses compose.dev.yaml.
 
-x-image: &image ghcr.io/meldgrove/logbuch:${LOGBUCH_VERSION:?set LOGBUCH_VERSION in .env to a release, e.g. 0.1.0}
+x-image: &image ghcr.io/meldgrove/logbook:${LOGBOOK_VERSION:-${LOGBUCH_VERSION:?set LOGBOOK_VERSION in .env to a release, e.g. 0.2.0}}
 
 x-app-environment: &app-environment
   DATABASE_URL: ${DATABASE_URL:?}
@@ -30,7 +30,7 @@ x-app-environment: &app-environment
   LOG_LEVEL: ${LOG_LEVEL:-info}
 
 x-directory-environment: &directory-environment
-  LOGBUCH_BASE_URL: ${LOGBUCH_BASE_URL:?}
+  LOGBOOK_BASE_URL: ${LOGBOOK_BASE_URL:-${LOGBUCH_BASE_URL:?set LOGBOOK_BASE_URL to the public URL}}
   OIDC_ISSUER: ${OIDC_ISSUER:?}
   OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?}
   OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?}
@@ -112,7 +112,7 @@ services:
       start_period: 30s
 
   # Automatic updates (docs/deployment.md): off until UPDATE_DEPLOY_HOOK_URL
-  # is set. When the tag in LOGBUCH_VERSION points to a new image, it calls
+  # is set. When the tag in LOGBOOK_VERSION points to a new image, it calls
   # that deploy link, and the platform deploys the new release.
   updater:
     image: ghcr.io/meldgrove/updater:0.1

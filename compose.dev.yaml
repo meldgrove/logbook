@@ -1,22 +1,22 @@
 # Local development: PostgreSQL 18 and a Keycloak with a development realm.
 #   docker compose -f compose.dev.yaml up -d
-# Keycloak: http://localhost:8090 (admin / admin), realm "logbuch".
+# Keycloak: http://localhost:8090 (admin / admin), realm "logbook".
 # The production setup is compose.yaml.
-name: logbuch-dev
+name: logbook-dev
 
 services:
   postgres:
     image: postgres:18
     environment:
-      POSTGRES_USER: logbuch
-      POSTGRES_PASSWORD: logbuch
-      POSTGRES_DB: logbuch
+      POSTGRES_USER: logbook
+      POSTGRES_PASSWORD: logbook
+      POSTGRES_DB: logbook
     ports:
       - "127.0.0.1:55432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U logbuch -d logbuch"]
+      test: ["CMD-SHELL", "pg_isready -U logbook -d logbook"]
       interval: 5s
       timeout: 3s
       retries: 20

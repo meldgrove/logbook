@@ -1,8 +1,8 @@
 # Deployment
 
-Logbuch ships as one Docker image, `ghcr.io/meldgrove/logbuch`, for
-linux/amd64 and linux/arm64. Each [release](https://github.com/meldgrove/logbuch/releases)
-is tagged with its version (`0.1.0`) and its series (`0.1`, which moves to
+Logbook ships as one Docker image, `ghcr.io/meldgrove/logbook`, for
+linux/amd64 and linux/arm64. Each [release](https://github.com/meldgrove/logbook/releases)
+is tagged with its version (e.g. `0.2.0`) and its series (`0.2`, which moves to
 every later release of the series; from 1.0.0 the series is the major
 version, `1`); `latest` is the newest release. A release that needs manual
 steps starts a new series, so the releases within a series install without
@@ -18,7 +18,7 @@ command selects the process:
 | `worker` | Background jobs: notifications, reminders, the webhook, and the Keycloak directory sync. One is enough; more can run, since jobs are coordinated through the database |
 | `directory-sync` | Runs one Keycloak directory sync, then exits |
 
-Logbuch needs PostgreSQL 18. Background jobs (pg-boss) keep their tables in
+Logbook needs PostgreSQL 18. Background jobs (pg-boss) keep their tables in
 the `pgboss` schema of the same database.
 
 ## Docker Compose
@@ -28,18 +28,18 @@ against the PostgreSQL in `DATABASE_URL`. Take it from the release you deploy,
 together with `.env.example` as the start of your `.env`:
 
 ```sh
-version=0.1.0   # the release to deploy
-curl -fsSLO "https://raw.githubusercontent.com/meldgrove/logbuch/v$version/compose.yaml"
-curl -fsSL -o .env "https://raw.githubusercontent.com/meldgrove/logbuch/v$version/.env.example"
+version=0.2.0   # replace with the Logbook release to deploy
+curl -fsSLO "https://raw.githubusercontent.com/meldgrove/logbook/v$version/compose.yaml"
+curl -fsSL -o .env "https://raw.githubusercontent.com/meldgrove/logbook/v$version/.env.example"
 # Edit .env with the production values (docs/configuration.md): at least
-# DATABASE_URL, LOGBUCH_BASE_URL, BETTER_AUTH_SECRET, the OIDC_* variables,
+# DATABASE_URL, LOGBOOK_BASE_URL, BETTER_AUTH_SECRET, the OIDC_* variables,
 # and DIRECTORY with its settings. Remove NOTIFICATION_TRANSPORT (production
 # sends for real). Add the release:
-#   LOGBUCH_VERSION=0.1.0
+#   LOGBOOK_VERSION=0.2.0   # use the same version as above
 docker compose up -d
 ```
 
-`LOGBUCH_VERSION` is required: Compose stops with a message without it.
+`LOGBOOK_VERSION` is required: Compose stops with a message without it.
 
 On a platform that runs Compose files, create the PostgreSQL there and set
 `DATABASE_URL` to its internal URL. Some platforms start each Compose project
@@ -52,13 +52,13 @@ follow the branch `stable`, which is at the newest release; `main` has
 changes that are not released yet.
 
 Put a reverse proxy that terminates TLS in front of `web` and use its public
-URL as `LOGBUCH_BASE_URL`. Use exactly that URL: login redirects and links in
+URL as `LOGBOOK_BASE_URL`. Use exactly that URL: login redirects and links in
 messages are built from it.
 
 Set `TZ` to your organization's time zone (default UTC): deadlines end at
 23:59, and reminders go out at 09:00, in that zone.
 
-### PostgreSQL next to Logbuch
+### PostgreSQL next to Logbook
 
 On a server without a PostgreSQL of its own,
 [`compose.postgres.yaml`](../compose.postgres.yaml) (from the same release)
@@ -69,11 +69,32 @@ adds one to the Compose project and keeps its data in the `postgres-data` volume
 COMPOSE_FILE=compose.yaml:compose.postgres.yaml
 # openssl rand -hex 32: no characters that would need escaping in the URL
 POSTGRES_PASSWORD=<password>
-DATABASE_URL=postgres://logbuch:<password>@postgres:5432/logbuch
+DATABASE_URL=postgres://logbook:<password>@postgres:5432/logbook
 ```
 
-PostgreSQL takes the password once, when it creates the database at the first
-start. Changing `POSTGRES_PASSWORD` later does not change it.
+PostgreSQL uses `POSTGRES_USER`, `POSTGRES_DB` (both default to `logbook`),
+and `POSTGRES_PASSWORD` when it initializes the volume. For an existing
+volume, set them to the role, database, and password already in use.
+
+### Upgrading from Logbuch
+
+The first Logbook release uses the new image path. The updater on the old
+image path will not discover it.
+
+1. Back up PostgreSQL. Keep the same `DATABASE_URL`, `BETTER_AUTH_SECRET`,
+   public URL, and OIDC settings. Keep the existing Compose project name and
+   volumes. If you run the bundled PostgreSQL, set `POSTGRES_USER=logbuch`
+   and `POSTGRES_DB=logbuch` to match the existing volume.
+2. Take the Compose files from the new release and set `LOGBOOK_VERSION` to
+   its version or series. Rename `LOGBUCH_BASE_URL` to `LOGBOOK_BASE_URL`.
+   If your platform reads Compose from GitHub, point it to `meldgrove/logbook`
+   and follow `stable`.
+3. Deploy the new version. The session cookie has a new name, so people will
+   sign in again. If you pinned `MAIL_FROM_NAME` to the old name, set it to
+   `Logbook` or remove the override to use the new default.
+
+Existing release images remain at `ghcr.io/meldgrove/logbuch`. To continue
+using one, use the Compose files from its tag.
 
 ### Checking the image
 
@@ -82,8 +103,8 @@ names the commit and the workflow run it was built from. With the
 [GitHub CLI](https://cli.github.com):
 
 ```sh
-gh attestation verify oci://ghcr.io/meldgrove/logbuch:0.1.0 \
-  --repo meldgrove/logbuch --signer-repo meldgrove/.github
+gh attestation verify oci://ghcr.io/meldgrove/logbook:0.2.0 \
+  --repo meldgrove/logbook --signer-repo meldgrove/.github
 ```
 
 ### Building the image yourself
@@ -92,8 +113,8 @@ To run your own build, for example of a change that is not released yet, build
 the image from a clone of the repository and give it a version of its own:
 
 ```sh
-docker build -t ghcr.io/meldgrove/logbuch:local .
-# In .env: LOGBUCH_VERSION=local
+docker build -t ghcr.io/meldgrove/logbook:local .
+# In .env: LOGBOOK_VERSION=local
 docker compose up -d
 ```
 
@@ -110,7 +131,7 @@ admin page shows the worker's last heartbeat.
 
 ## Operations
 
-- **Backups**: Logbuch never deletes entries, people, or the audit log, so
+- **Backups**: Logbook never deletes entries, people, or the audit log, so
   the database backup is the safety net. Back up the whole database,
   including the `pgboss` schema.
 - **Logs** are JSON lines on stdout. The `service` field names the process.
@@ -118,7 +139,7 @@ admin page shows the worker's last heartbeat.
   failures, webhook deliveries, and the default periods of the decision
   process.
 - **Upgrades**: read the release notes of every release since yours, set
-  `LOGBUCH_VERSION` to the new release, and run `docker compose up -d`. For a
+  `LOGBOOK_VERSION` to the new release, and run `docker compose up -d`. For a
   new series, take its `compose.yaml` too. `migrate` applies new migrations
   before `web` and `worker` start. Back up the database first: migrations
   only move forward.
@@ -127,12 +148,12 @@ admin page shows the worker's last heartbeat.
 
 `compose.yaml` includes the `updater` service of
 [Meldgrove Updater](https://github.com/meldgrove/updater). Once an hour it
-checks whether the tag in `LOGBUCH_VERSION` points to a new image. If so, it
+checks whether the tag in `LOGBOOK_VERSION` points to a new image. If so, it
 calls the deploy link of the platform, which pulls the image and restarts
-Logbuch, `migrate` first. Until `UPDATE_DEPLOY_HOOK_URL` is set, it does
+Logbook, `migrate` first. Until `UPDATE_DEPLOY_HOOK_URL` is set, it does
 nothing.
 
-1. Set `LOGBUCH_VERSION` to a tag that moves:
+1. Set `LOGBOOK_VERSION` to a tag that moves:
    - a series such as `0.2` (from 1.0.0 the major version, such as `1`):
      every release of that series, with its features and fixes. None of them
      needs manual steps. A release that does starts the next series: the
@@ -159,7 +180,7 @@ the version.
 A release installs three days after it came out, so that a faulty one can be
 replaced before it reaches the server. `UPDATE_COOLDOWN` changes the time:
 `0` installs within the hour, `7d` waits a week. Security fixes wait as well;
-deploy by hand to install a release at once. Most platforms stop Logbuch for
+deploy by hand to install a release at once. Most platforms stop Logbook for
 a moment while they deploy: `UPDATE_WINDOW`, such as `02:00-05:00` in the
 time zone `TZ`, keeps that out of working hours.
 
@@ -168,7 +189,7 @@ Without a platform, leave the deploy link empty and let cron run
 
 ## Importing old entries from a CSV file
 
-`import-entries` logs updates, learnings, and decisions from before Logbuch,
+`import-entries` logs updates, learnings, and decisions from before Logbook,
 for example from an old decision log or a chat channel. Fill the columns of
 [`entry-import-template.csv`](entry-import-template.csv) (comma or semicolon
 separated, UTF-8). Unknown columns are ignored.

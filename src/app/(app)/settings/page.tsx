@@ -16,7 +16,7 @@ export default async function SettingsPage() {
     <div className="flex max-w-2xl flex-col gap-6">
       <PageHeader
         title="Settings"
-        description={`How Logbuch shows dates and times to you. Deadlines always end at 23:59 in ${SERVER_TIME_ZONE}, the time zone of this Logbuch.`}
+        description={`How Logbook shows dates and times to you. Deadlines always end at 23:59 in ${SERVER_TIME_ZONE}, the time zone of this Logbook.`}
       />
       <Card>
         <CardContent>

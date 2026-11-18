@@ -23,7 +23,7 @@ export async function getMonthlyStatistics(db: Database, now: Date = new Date(),
     db
       .select({ type: entry.type, publishedAt: entry.publishedAt })
       .from(entry)
-      // Imported old decisions are not use of Logbuch.
+      // Imported old decisions are not use of Logbook.
       .leftJoin(entryImport, eq(entryImport.entryId, entry.id))
       // Logged entries are "published"; proposals end as decided or rejected.
       .where(and(eq(entry.status, "published"), isNotNull(entry.publishedAt), isNull(entryImport.entryId))),

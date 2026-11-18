@@ -9,7 +9,7 @@ import { loadEntryFacts } from "./facts";
 import { toWebhookPayload, type WebhookPayload } from "./payload";
 
 /*
- * Keeps the webhook receiver in step with Logbuch. Commands call
+ * Keeps the webhook receiver in step with Logbook. Commands call
  * `requestWebhook` in their transaction (publish, edit, impact change,
  * addendum, supersede, decision). The worker sends requested entries every
  * minute and, every night, re-sends every entry whose payload changed.
@@ -61,7 +61,7 @@ const isDue = (now: Date) =>
 /**
  * Sends one requested entry. The run first claims the entry with a lease in a
  * single statement, so no two runs send it at the same time; no transaction
- * is open while the receiver answers, so writes in Logbuch never wait for it.
+ * is open while the receiver answers, so writes in Logbook never wait for it.
  * Completion updates apply only while this run still owns the lease, and the
  * request is cleared, or a failure counted, only if no newer request arrived
  * meanwhile: a newer request keeps its immediate, fresh retry state.

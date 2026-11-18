@@ -37,7 +37,7 @@ interface EntryEffects<T> {
   audit: { action: AuditAction; payload?: Record<string, unknown> };
   /** The text the search reads changed. */
   searchText?: boolean;
-  /** Post the entry to the Logbuch Slack channel. */
+  /** Post the entry to the Logbook Slack channel. */
   post?: boolean;
   /** Tell the people on the entry about this addendum. */
   addendumId?: string;
@@ -94,7 +94,7 @@ export const DECIDED_STATUSES = ["published", "decided"] as const;
 
 /** How an entry is logged. Only the import of old entries changes the defaults. */
 export interface LogOptions {
-  /** `false` skips the post to the Logbuch Slack channel. */
+  /** `false` skips the post to the Logbook Slack channel. */
   announce?: boolean;
   /** The source identity, recorded in the same transaction (unique: a second import of the same source fails and writes nothing). */
   importedFrom?: { source: string; externalId: string };
@@ -134,7 +134,7 @@ export async function assertPeopleWithAccess(tx: Transaction, field: string, per
     .select({ id: person.id })
     .from(person)
     .where(and(inArray(person.id, personIds), eq(person.hasAccess, true)));
-  if (rows.length !== personIds.length) throw invalid(field, "Choose people who have access to Logbuch.");
+  if (rows.length !== personIds.length) throw invalid(field, "Choose people who have access to Logbook.");
 }
 
 export async function assertPublishedEntries(tx: Transaction, field: string, entryIds: string[]) {
@@ -354,7 +354,7 @@ function sameSet(a: string[], b: string[]): boolean {
 export type LoggedDecision = DecisionInput | ImportedDecisionInput;
 
 /**
- * Publishes a decision made outside Logbuch. A published
+ * Publishes a decision made outside Logbook. A published
  * decision is never edited; corrections are addenda. If it supersedes another
  * decision, that one is flagged and keeps its status. See `LogOptions` for
  * imports of old decisions.

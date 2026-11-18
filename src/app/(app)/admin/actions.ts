@@ -13,7 +13,7 @@ export interface SyncActionState {
 export async function syncDirectoryAction(): Promise<SyncActionState> {
   await requireAdmin();
   const sync = getDirectory().sync;
-  if (!sync) return { tone: "info", message: "People and teams are managed in Logbuch. There is nothing to sync." };
+  if (!sync) return { tone: "info", message: "People and teams are managed in Logbook. There is nothing to sync." };
   const result = await sync.run("admin", 10_000);
   revalidatePath("/admin");
   switch (result.status) {
@@ -33,7 +33,7 @@ export async function syncDirectoryAction(): Promise<SyncActionState> {
     case "failed":
       return {
         tone: "error",
-        message: `The sync failed: ${result.error}. Logbuch keeps the previous access list.`,
+        message: `The sync failed: ${result.error}. Logbook keeps the previous access list.`,
       };
   }
 }

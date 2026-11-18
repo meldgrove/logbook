@@ -45,11 +45,11 @@ function loginSubjectOf(context: object | null, userId: string): string | undefi
  */
 export function createAuth({ config, directory, db }: CreateAuthOptions) {
   return betterAuth({
-    appName: "Meldgrove Logbuch",
-    baseURL: config.LOGBUCH_BASE_URL,
+    appName: "Logbook",
+    baseURL: config.LOGBOOK_BASE_URL,
     basePath: "/api/auth",
     secret: config.BETTER_AUTH_SECRET,
-    trustedOrigins: [config.LOGBUCH_BASE_URL],
+    trustedOrigins: [config.LOGBOOK_BASE_URL],
     database: drizzleAdapter(db, {
       provider: "pg",
       schema: { user: authUser, session: authSession, account: authAccount, verification: authVerification },
@@ -63,15 +63,15 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
         oidcSubject: { type: "string", required: true, input: false },
       },
     },
-    // Logbuch never uses the provider's access and refresh tokens, but
+    // Logbook never uses the provider's access and refresh tokens, but
     // Better Auth stores them: keep them encrypted (with BETTER_AUTH_SECRET).
     // The ID token stays readable; logout sends it as `id_token_hint`.
     account: { encryptOAuthTokens: true },
     advanced: {
-      cookiePrefix: "logbuch",
-      useSecureCookies: config.LOGBUCH_BASE_URL.startsWith("https://"),
+      cookiePrefix: "logbook",
+      useSecureCookies: config.LOGBOOK_BASE_URL.startsWith("https://"),
     },
-    onAPIError: { errorURL: `${config.LOGBUCH_BASE_URL}/login` },
+    onAPIError: { errorURL: `${config.LOGBOOK_BASE_URL}/login` },
     databaseHooks: {
       account: {
         create: { after: async (account, context) => rememberLoginAccount(context, account) },
@@ -94,7 +94,7 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
               logger.info({ userId: session.userId }, "login denied: no access");
               throw new APIError("FORBIDDEN", {
                 code: NO_ACCESS_ERROR_CODE,
-                message: "You do not have access to Logbuch.",
+                message: "You do not have access to Logbook.",
               });
             }
             return { data: { ...session, oidcSubject: subject } };
@@ -113,7 +113,7 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
             scopes: config.OIDC_SCOPES.split(/[\s,]+/).filter(Boolean),
             pkce: true,
             requireIdTokenVerification: true,
-            postLogoutRedirectURI: `${config.LOGBUCH_BASE_URL}/`,
+            postLogoutRedirectURI: `${config.LOGBOOK_BASE_URL}/`,
           },
         ],
       }),
@@ -125,9 +125,9 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
 
 export type Auth = ReturnType<typeof createAuth>;
 
-const globalForAuth = globalThis as unknown as { logbuchAuth?: Auth };
+const globalForAuth = globalThis as unknown as { logbookAuth?: Auth };
 
 export function getAuth(): Auth {
-  globalForAuth.logbuchAuth ??= createAuth({ config: getAuthConfig(), directory: getDirectory(), db: getDb() });
-  return globalForAuth.logbuchAuth;
+  globalForAuth.logbookAuth ??= createAuth({ config: getAuthConfig(), directory: getDirectory(), db: getDb() });
+  return globalForAuth.logbookAuth;
 }

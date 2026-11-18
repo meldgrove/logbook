@@ -95,7 +95,7 @@ describe("a CSV row as a logged decision", () => {
         summary: "We use three lead stages: MQL SQL",
         links: ["https://example.org/a", "https://example.org/b"],
       },
-      notes: ["gone@example.org has no Logbuch access and is not listed as involved."],
+      notes: ["gone@example.org has no Logbook access and is not listed as involved."],
     });
   });
 
@@ -131,7 +131,7 @@ describe("a CSV row as a logged decision", () => {
     expect(problem({ ...base, impact: "huge" })).toBe('"huge" in impact is not one of: small, medium, large.');
     expect(problem({ ...base, reversibility: "maybe" })).toBe('"maybe" in reversibility is not one of: two_way, one_way.');
     expect(problem({ ...base, team: "Archive" })).toBe('There is no active team "Archive".');
-    expect(problem({ ...base, decider_email: "gone@example.org" })).toMatch(/has no Logbuch access/);
+    expect(problem({ ...base, decider_email: "gone@example.org" })).toMatch(/has no Logbook access/);
     expect(problem({ ...base, links: "not-a-url" })).toMatch(/http\(s\)/);
     expect(problem({ ...base, decider_email: "gone@example.org" }, { fallbackDecider: ADA })).toBeUndefined();
   });

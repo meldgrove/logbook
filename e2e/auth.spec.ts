@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { collectCspViolations, expectAccessible, setGroupMembership, signIn } from "./helpers";
+import { collectCspViolations, expectAccessible, KEYCLOAK_URL, setGroupMembership, signIn } from "./helpers";
 
 test("a member of the access group signs in and sees the timeline", async ({ page }) => {
   const cspViolations = collectCspViolations(page);
@@ -23,7 +23,7 @@ test("pages carry a nonce-based Content Security Policy", async ({ page }) => {
   const nonce = /'nonce-([^']+)'/.exec(csp)?.[1];
   expect(nonce).toBeTruthy();
   expect(csp).toContain("frame-ancestors 'none'");
-  expect(csp).toContain("form-action 'self' http://localhost:8090");
+  expect(csp).toContain(`form-action 'self' ${new URL(KEYCLOAK_URL).origin}`);
   // Next.js puts the nonce on the scripts it renders. Scripts those load
   // later carry none and are allowed by 'strict-dynamic'.
   const scriptNonces = await page
@@ -83,9 +83,9 @@ test("everyone sees the statistics, including themselves as active this month", 
 test("someone outside the access group is denied", async ({ page, context }) => {
   await signIn(page, "olga");
   await expect(page).toHaveURL(/\/no-access$/);
-  await expect(page.getByRole("heading", { name: "No access to Logbuch" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No access to Logbook" })).toBeVisible();
   await expectAccessible(page);
-  // No Logbuch session was created.
+  // No Logbook session was created.
   const cookies = await context.cookies();
   expect(cookies.some((cookie) => cookie.name.includes("session_token"))).toBe(false);
   await page.goto("/");
@@ -113,7 +113,7 @@ test("someone removed from the access group loses their session at the next sync
     await signIn(member, "erika");
     await expect(member.getByRole("heading", { name: "Timeline" })).toBeVisible();
 
-    await setGroupMembership("erika", "/logbuch", false);
+    await setGroupMembership("erika", "/logbook", false);
     await signIn(admin, "adam");
     await admin.goto("/admin");
     // A sync may have run in the last 10 seconds; retry until one runs.
@@ -128,7 +128,7 @@ test("someone removed from the access group loses their session at the next sync
     await member.reload();
     await expect(member).toHaveURL(/\/login$/);
   } finally {
-    await setGroupMembership("erika", "/logbuch", true);
+    await setGroupMembership("erika", "/logbook", true);
     // Give the access back, so later tests can sign in as erika right away.
     await expect(async () => {
       await admin.getByRole("button", { name: "Sync now" }).click();

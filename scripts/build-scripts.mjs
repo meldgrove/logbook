@@ -23,7 +23,7 @@ await build({
   external: ["pg-native"],
   // Bundled CommonJS dependencies call require().
   banner: {
-    js: "import { createRequire as __logbuchCreateRequire } from 'node:module'; const require = __logbuchCreateRequire(import.meta.url);",
+    js: "import { createRequire as __logbookCreateRequire } from 'node:module'; const require = __logbookCreateRequire(import.meta.url);",
   },
   logLevel: "info",
 });

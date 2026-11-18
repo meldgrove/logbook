@@ -139,7 +139,7 @@ describe("recording notifications", () => {
     await watchProposals(db, WEDNESDAY);
     const lost = await deliveries("proposal.lost_access");
     expect(ids(lost)).toEqual([ada.personId]);
-    expect(lost[0]!.message.text).toContain("Amy Admin no longer has access to Logbuch and is a feedback giver");
+    expect(lost[0]!.message.text).toContain("Amy Admin no longer has access to Logbook and is a feedback giver");
   });
 
   it("tells the people on a decision about an addendum", async () => {
@@ -294,9 +294,9 @@ function fakeTransports(options: { slackUsers?: Record<string, string>; email?: 
     },
   };
   const transports: Transports = {
-    baseUrl: "https://logbuch.example",
+    baseUrl: "https://logbook.example",
     slack,
-    slackChannelId: "C_LOGBUCH",
+    slackChannelId: "C_LOGBOOK",
     email:
       options.email === false
         ? undefined
@@ -319,9 +319,9 @@ describe("the worker's sender", () => {
     const id = await submitted();
     const fake = fakeTransports({ slackUsers: users });
     expect(await dispatchDue(db, fake.transports, () => WEDNESDAY)).toEqual({ sent: 4, skipped: 0, retry: 0, failed: 0 });
-    expect(fake.slackMessages.map((m) => m.userId).sort()).toEqual(["C_LOGBUCH", "U_AMY", "U_DAN"]);
-    expect(fake.slackMessages.find((m) => m.userId === "C_LOGBUCH")!.text).toContain("Ada Author proposes a two-way decision. Feedback is open.");
-    expect(fake.slackMessages[0]!.text).toMatch(/^\*<https:\/\/logbuch\.example\/e\/LB-\d+\|LB-\d+ · Four-day week>\*/);
+    expect(fake.slackMessages.map((m) => m.userId).sort()).toEqual(["C_LOGBOOK", "U_AMY", "U_DAN"]);
+    expect(fake.slackMessages.find((m) => m.userId === "C_LOGBOOK")!.text).toContain("Ada Author proposes a two-way decision. Feedback is open.");
+    expect(fake.slackMessages[0]!.text).toMatch(/^\*<https:\/\/logbook\.example\/e\/LB-\d+\|LB-\d+ · Four-day week>\*/);
 
     const people = new Map((await db.select().from(person)).map((p) => [p.id, p]));
     expect(people.get(amy.personId)).toMatchObject({ slackUserId: "U_AMY", slackLookupFailedAt: null });
@@ -483,12 +483,12 @@ describe("the worker's sender", () => {
       postMessage: async () => undefined,
     });
 
-    expect(await retrySlackLookups(db, { baseUrl: "https://logbuch.example", slack: racing("U_OLD") }, WEDNESDAY)).toBe(0);
+    expect(await retrySlackLookups(db, { baseUrl: "https://logbook.example", slack: racing("U_OLD") }, WEDNESDAY)).toBe(0);
     let [amyRow] = await db.select().from(person).where(eq(person.id, amy.personId));
     expect(amyRow).toMatchObject({ workEmail: "amy.new@example.org", slackUserId: null, slackLookupFailedAt: null });
 
     await db.update(person).set({ workEmail: "amy@example.org" }).where(eq(person.id, amy.personId));
-    expect(await dispatchDue(db, { baseUrl: "https://logbuch.example", slack: racing(null) }, () => WEDNESDAY)).toMatchObject({ retry: 1 });
+    expect(await dispatchDue(db, { baseUrl: "https://logbook.example", slack: racing(null) }, () => WEDNESDAY)).toMatchObject({ retry: 1 });
     [amyRow] = await db.select().from(person).where(eq(person.id, amy.personId));
     expect(amyRow).toMatchObject({ slackUserId: null, slackLookupFailedAt: null });
   });
@@ -523,7 +523,7 @@ async function submitProposalFor(decider: Actor) {
   return submitted(draftInput({ feedbackGiverIds: [], deciderId: decider.personId }));
 }
 
-describe("the Logbuch Slack channel", () => {
+describe("the Logbook Slack channel", () => {
   const update = () =>
     createNote(
       db,
@@ -550,7 +550,7 @@ describe("the Logbuch Slack channel", () => {
 
     const fake = fakeTransports();
     await dispatchDue(db, fake.transports, () => WEDNESDAY);
-    expect(fake.slackMessages).toEqual([{ userId: "C_LOGBUCH", text: expect.stringContaining("Ada Author posted an update.") }]);
+    expect(fake.slackMessages).toEqual([{ userId: "C_LOGBOOK", text: expect.stringContaining("Ada Author posted an update.") }]);
 
     await update();
     await dispatchDue(db, { ...fake.transports, slackChannelId: undefined }, () => WEDNESDAY);
@@ -566,7 +566,7 @@ describe("the Logbuch Slack channel", () => {
 
     const fake = fakeTransports();
     await dispatchDue(db, fake.transports, () => WEDNESDAY);
-    const text = fake.slackMessages.find((m) => m.userId === "C_LOGBUCH")!.text;
+    const text = fake.slackMessages.find((m) => m.userId === "C_LOGBOOK")!.text;
     expect(text).toMatch(/^\*Must read\* · /);
     expect(text).toContain(">Try a four-day week.");
     expect(text).toContain("Decision · Impact: Large · Affected teams: Operations");

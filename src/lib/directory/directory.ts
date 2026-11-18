@@ -11,7 +11,7 @@ import { syncDirectory, type SyncResult, type SyncTrigger } from "./sync";
  * the questions in which the directories differ, so callers never read
  * DIRECTORY themselves:
  *
- * - manual: admins invite people and manage teams in Logbuch. An invitation
+ * - manual: admins invite people and manage teams in Logbook. An invitation
  *   is linked at the first login; the first admin comes from
  *   INITIAL_ADMIN_EMAILS.
  * - keycloak: a sync brings people and teams from Keycloak groups, every 15
@@ -23,7 +23,7 @@ export type DirectoryKind = DirectoryConfig["DIRECTORY"];
 export interface Directory {
   /** For logs. Callers ask the other members instead of branching on it. */
   readonly kind: DirectoryKind;
-  /** Admins change people and teams in Logbuch. False when a sync brings them from Keycloak. */
+  /** Admins change people and teams in Logbook. False when a sync brings them from Keycloak. */
   readonly editable: boolean;
   /** The sync from Keycloak, or null when there is nothing to sync. */
   readonly sync: DirectorySync | null;

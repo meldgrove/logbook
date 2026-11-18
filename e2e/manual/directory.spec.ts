@@ -28,7 +28,7 @@ test("the first admin comes from INITIAL_ADMIN_EMAILS", async ({ page }) => {
 test("someone who was not invited is denied", async ({ page }) => {
   await signIn(page, "erika");
   await expect(page).toHaveURL(/\/no-access$/);
-  await expect(page.getByRole("heading", { name: "No access to Logbuch" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No access to Logbook" })).toBeVisible();
 });
 
 test("an admin creates a team and invites a person, who then signs in", async ({ page, browser }) => {

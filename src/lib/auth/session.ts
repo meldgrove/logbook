@@ -64,7 +64,7 @@ export async function requireUser(): Promise<CurrentUser> {
   return { userId: loaded.session.user.id, person: loaded.person };
 }
 
-/** Like `requireUser`, and the person must be a Logbuch admin. */
+/** Like `requireUser`, and the person must be a Logbook admin. */
 export async function requireAdmin(): Promise<CurrentUser> {
   const user = await requireUser();
   if (!user.person.isAdmin) notFound();

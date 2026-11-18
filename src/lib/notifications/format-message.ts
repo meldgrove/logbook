@@ -38,7 +38,7 @@ export interface EmailContent {
   html: string;
 }
 
-const FOOTER = "You get this email because you take part in this entry in Logbuch.";
+const FOOTER = "You get this email because you take part in this entry in Logbook.";
 
 /** An email in plain text and HTML. */
 export function emailContent(message: NotificationMessage, recipientName: string, baseUrl: string, formatter: DateFormatter): EmailContent {

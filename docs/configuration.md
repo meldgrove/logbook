@@ -1,6 +1,6 @@
 # Configuration
 
-Logbuch reads its configuration from environment variables. Blank values count
+Logbook reads its configuration from environment variables. Blank values count
 as unset. Every process validates what it needs at startup and stops with a
 list of missing or invalid variables.
 
@@ -12,12 +12,15 @@ variable.
 
 | Variable | Process | Value |
 |---|---|---|
-| `DATABASE_URL` | all | `postgres://user:password@host:5432/logbuch` |
-| `LOGBUCH_BASE_URL` | web, worker | The public URL, e.g. `https://logbuch.example.org`. Used for login redirects and links in messages |
+| `DATABASE_URL` | all | `postgres://user:password@host:5432/logbook` |
+| `LOGBOOK_BASE_URL` | web, worker | The public URL, e.g. `https://logbook.example.org`. Used for login redirects and links in messages |
 | `BETTER_AUTH_SECRET` | web | At least 32 characters: `openssl rand -base64 32`. Signs session cookies |
 | `OIDC_ISSUER` | web | Issuer URL of the OpenID Connect provider, e.g. `https://auth.example.org/realms/acme` |
-| `OIDC_CLIENT_ID` | web | Client ID registered for Logbuch |
+| `OIDC_CLIENT_ID` | web | Client ID registered for Logbook |
 | `OIDC_CLIENT_SECRET` | web | Its client secret |
+
+The web and worker still accept `LOGBUCH_BASE_URL` when `LOGBOOK_BASE_URL`
+is unset.
 
 ## Login
 
@@ -33,13 +36,13 @@ provider-specific notes.
 
 | Variable | Default | Value |
 |---|---|---|
-| `DIRECTORY` | `manual` | `manual`: admins invite people in Logbuch. `keycloak`: people and teams come from Keycloak groups |
+| `DIRECTORY` | `manual` | `manual`: admins invite people in Logbook. `keycloak`: people and teams come from Keycloak groups |
 
 With `DIRECTORY=manual`:
 
 | Variable | Default | Value |
 |---|---|---|
-| `INITIAL_ADMIN_EMAILS` | required | Email addresses, separated by commas. While Logbuch has no admin, the first login with one of them (verified by the provider) becomes an admin. Without it, nobody could ever get in; afterwards it has no effect |
+| `INITIAL_ADMIN_EMAILS` | required | Email addresses, separated by commas. While Logbook has no admin, the first login with one of them (verified by the provider) becomes an admin. Without it, nobody could ever get in; afterwards it has no effect |
 
 With `DIRECTORY=keycloak` (needed by web and worker). All three groups are
 required: every entry belongs to a team, and only admins manage tags and
@@ -48,8 +51,8 @@ trailing one.
 
 | Variable | Default | Value |
 |---|---|---|
-| `KEYCLOAK_ACCESS_GROUP` | required | Group path, e.g. `/logbuch`. Its members, and members of its subgroups, have access |
-| `KEYCLOAK_ADMIN_GROUP` | required | Group path, e.g. `/logbuch-admins`. Its members are admins (and have access) |
+| `KEYCLOAK_ACCESS_GROUP` | required | Group path, e.g. `/logbook`. Its members, and members of its subgroups, have access |
+| `KEYCLOAK_ADMIN_GROUP` | required | Group path, e.g. `/logbook-admins`. Its members are admins (and have access) |
 | `KEYCLOAK_TEAMS_GROUP` | required | Group path, e.g. `/teams`. Each direct subgroup is a team; it needs at least one |
 | `KEYCLOAK_CLIENT_ID` | `OIDC_CLIENT_ID` | Client with a service account that may read users and groups |
 | `KEYCLOAK_CLIENT_SECRET` | `OIDC_CLIENT_SECRET` | Its secret |
@@ -65,7 +68,7 @@ address), the message goes out on the other. So it does after an error that
 trying again cannot fix, such as an invalid token, a missing Slack scope, or a
 rejected address. Other errors, such as an outage or a rate limit, are retried
 after 1, 5, 15, and 60 minutes; the fifth and last attempt tries the other
-channel too. Without either channel, Logbuch only shows tasks in the app.
+channel too. Without either channel, Logbook only shows tasks in the app.
 
 | Variable | Default | Value |
 |---|---|---|
@@ -74,7 +77,7 @@ channel too. Without either channel, Logbuch only shows tasks in the app.
 | `SMTP_URL` | none | `smtp://user:password@host:587` (STARTTLS) or `smtps://user:password@host:465`. Percent-encode special characters in the password |
 | `MAILERSEND_API_TOKEN` | none | MailerSend API token with email sending access. Use either SMTP or MailerSend |
 | `MAIL_FROM` | none | Sender address; required with SMTP or MailerSend |
-| `MAIL_FROM_NAME` | `Meldgrove Logbuch` | Sender name |
+| `MAIL_FROM_NAME` | `Logbook` | Sender name |
 | `NOTIFICATION_TRANSPORT` | `live` in production, otherwise `console` | `console` only logs messages instead of sending them |
 
 ## Webhook (worker)
@@ -98,11 +101,11 @@ strings, or values from database queries. The browser sends nothing.
 |---|---|---|
 | `SENTRY_DSN` | none | The project's DSN (Client Key). Off without it |
 | `SENTRY_ENVIRONMENT` | `production` | Environment name shown in Sentry, e.g. `staging` |
-| `SENTRY_RELEASE` | `logbuch@<APP_VERSION>` in release images, otherwise none | Release name, e.g. the deployed commit SHA |
+| `SENTRY_RELEASE` | `logbook@<APP_VERSION>` in release images, otherwise none | Release name, e.g. the deployed commit SHA |
 
 ## Time zone
 
-Logbuch uses the server's time zone, set with the standard `TZ` variable
+Logbook uses the server's time zone, set with the standard `TZ` variable
 (e.g. `TZ=Europe/Vienna`; the Docker image defaults to UTC). It decides when a
 deadline day ends (23:59), when reminders go out (09:00 on working days,
 Monday to Friday), and the months in the statistics. Everyone can choose their
@@ -114,6 +117,10 @@ date format is `DD.MM.YYYY`.
 | Variable | Default | Value |
 |---|---|---|
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `LOGBOOK_PROCESS` | `web` | Process name in logs. The Docker entrypoint sets it from the command |
 | `APP_VERSION` | the version in release images, otherwise none | Set by release images, not by operators. `/-/healthz` and Sentry report it |
-| `WORKER_HEARTBEAT_FILE` | `/tmp/logbuch-worker-heartbeat` | File the worker touches for its health check |
+| `WORKER_HEARTBEAT_FILE` | `/tmp/logbook-worker-heartbeat` | File the worker touches for its health check |
 | `MIGRATIONS_DIR` | `drizzle` | Folder with the SQL migrations |
+
+Docker Compose uses `LOGBOOK_VERSION` to select the image tag. It still
+accepts `LOGBUCH_VERSION` when `LOGBOOK_VERSION` is unset.

@@ -2,7 +2,7 @@ import type { EntryType, HowDecided, Impact, Reversibility } from "@/lib/entries
 import { formatEntryRef } from "@/lib/entries/refs";
 
 /*
- * What Logbuch posts to the webhook, as a pure mapping from an entry's facts.
+ * What Logbook posts to the webhook, as a pure mapping from an entry's facts.
  * Published updates, learnings, and logged decisions, and decided or rejected
  * proposals are sent; drafts, open proposals, and withdrawn proposals are not.
  * Every request carries the whole entry as it is now, so a receiver stores it
@@ -46,7 +46,7 @@ export interface EntryFacts {
     objectionHandling: string | null;
     /** The date the decision was made (YYYY-MM-DD). */
     decidedOn: string;
-    /** When the outcome was recorded in Logbuch. */
+    /** When the outcome was recorded in Logbook. */
     decidedAt: Date;
     decidedByName: string;
   } | null;

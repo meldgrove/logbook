@@ -1,8 +1,8 @@
-# Meldgrove Logbuch
+# Logbook
 
-Meldgrove Logbuch (Logbuch for short) is a self-hosted log of an
-organization's decisions, updates, and learnings, with a built-in,
-consent-based decision process that works without meetings.
+Logbook is a self-hosted log of an organization's decisions, updates, and
+learnings, with a built-in, consent-based decision process that works without
+meetings.
 
 - **One timeline** for updates, decisions, and learnings, with filters,
   full-text search, and a "Must read" pin for entries with a large impact.
@@ -15,7 +15,7 @@ consent-based decision process that works without meetings.
   log.
 - **Login with any OpenID Connect provider** (Keycloak, Microsoft Entra ID,
   Google, Okta, Authentik, Zitadel, …).
-- **People and teams** are managed in Logbuch (invitations), or synced from
+- **People and teams** are managed in Logbook (invitations), or synced from
   Keycloak groups.
 - **Notifications** as Slack direct messages or emails (SMTP or MailerSend),
   reminders before deadlines, and one Slack channel post per new entry.
@@ -37,12 +37,12 @@ npm run worker                             # in a second terminal: notifications
 ```
 
 Sign in as `erika` (has access), `adam` (admin), or `olga` (no access), each
-with the password `logbuch-dev`. The development setup reads people and teams
+with the password `logbook-dev`. The development setup reads people and teams
 from Keycloak groups; see [`.env.example`](.env.example) to try the manual
 directory instead.
 
 `compose.yaml` is the production setup, so a plain `docker compose up` runs
-Logbuch itself; see [Deployment](docs/deployment.md).
+Logbook itself; see [Deployment](docs/deployment.md).
 
 ## Documentation
 

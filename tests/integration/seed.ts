@@ -2,7 +2,7 @@ import type { Database } from "@/lib/db/client";
 import { person, tag, team } from "@/lib/db/schema";
 import type { Actor } from "@/lib/entries/commands";
 
-/** Two active teams, one inactive team, three people with access (one admin), one without. Managed in Logbuch, as with the manual directory. */
+/** Two active teams, one inactive team, three people with access (one admin), one without. Managed in Logbook, as with the manual directory. */
 export async function seedDirectory(db: Database) {
   const [tech, ops, archive] = await db
     .insert(team)

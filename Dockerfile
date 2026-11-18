@@ -1,4 +1,4 @@
-# One image for every Logbuch process. The command selects the role:
+# One image for every Logbook process. The command selects the role:
 #   web      Next.js server (port 3000)
 #   worker   pg-boss worker: notifications, webhook, Keycloak directory sync
 #   migrate  applies database migrations, then exits
@@ -16,9 +16,9 @@ COPY . .
 RUN npm run build
 
 FROM base AS runtime
-LABEL org.opencontainers.image.title="Meldgrove Logbuch" \
+LABEL org.opencontainers.image.title="Logbook" \
       org.opencontainers.image.description="A self-hosted log of an organization's decisions, updates, and learnings, with a consent-based decision process." \
-      org.opencontainers.image.source="https://github.com/meldgrove/logbuch" \
+      org.opencontainers.image.source="https://github.com/meldgrove/logbook" \
       org.opencontainers.image.licenses="Apache-2.0"
 ENV NODE_ENV=production \
     PORT=3000 \

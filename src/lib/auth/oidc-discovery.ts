@@ -4,7 +4,7 @@ import { originOf } from "@/lib/security/csp";
 import { discoveryUrl } from "./discovery-url";
 
 /*
- * The parts of the identity provider's discovery document that Logbuch needs
+ * The parts of the identity provider's discovery document that Logbook needs
  * outside Better Auth: where the login and logout pages are (for the Content
  * Security Policy and for logging out without a session). Cached per process;
  * a failed fetch is retried after a minute.

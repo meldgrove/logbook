@@ -2,7 +2,7 @@
 set -e
 
 role="${1:-web}"
-export LOGBUCH_PROCESS="$role"
+export LOGBOOK_PROCESS="$role"
 
 case "$role" in
   web)

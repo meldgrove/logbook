@@ -4,11 +4,11 @@ import type { WebhookPayload } from "./payload";
 /*
  * Posts payloads to the webhook URL. Each request is signed with HMAC-SHA256
  * over "<timestamp>.<body>" with WEBHOOK_SECRET, so the receiver can check
- * that it comes from Logbuch and is recent:
+ * that it comes from Logbook and is recent:
  *
- *   Logbuch-Timestamp: <Unix time in seconds>
- *   Logbuch-Signature: sha256=<hex digest>
- *   Logbuch-Delivery: <random ID of this request>
+ *   Logbook-Timestamp: <Unix time in seconds>
+ *   Logbook-Signature: sha256=<hex digest>
+ *   Logbook-Delivery: <random ID of this request>
  *
  * Any 2xx answer counts as delivered.
  */
@@ -43,16 +43,22 @@ export function createWebhookClient(options: {
     async send(payload) {
       const body = JSON.stringify(payload);
       const timestamp = Math.floor(now() / 1000);
+      const signature = signWebhook(options.secret, timestamp, body);
+      const deliveryId = randomUUID();
       let response: Response;
       try {
         response = await fetchImpl(options.url, {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "user-agent": "Logbuch-Webhook",
+            "user-agent": "Logbook-Webhook",
+            "logbook-timestamp": String(timestamp),
+            "logbook-signature": signature,
+            "logbook-delivery": deliveryId,
+            // Existing receivers may still verify these header names.
             "logbuch-timestamp": String(timestamp),
-            "logbuch-signature": signWebhook(options.secret, timestamp, body),
-            "logbuch-delivery": randomUUID(),
+            "logbuch-signature": signature,
+            "logbuch-delivery": deliveryId,
           },
           body,
           redirect: "error",

@@ -269,7 +269,7 @@ export async function saveDraft(db: Database, actor: Actor, input: ProposalDraft
   });
 }
 
-/** Deletes an unsubmitted draft (the only deletion Logbuch allows). */
+/** Deletes an unsubmitted draft (the only deletion Logbook allows). */
 export async function discardDraft(db: Database, actor: Actor, entryId: string) {
   await db.transaction(async (tx) => {
     const [current] = await tx.select().from(entry).where(eq(entry.id, entryId)).for("update");

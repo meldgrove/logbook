@@ -16,9 +16,9 @@ Security fixes go into the latest release and the `main` branch.
 
 ## Deployment notes
 
-- Generate `BETTER_AUTH_SECRET` with `openssl rand -base64 32`. Logbuch
+- Generate `BETTER_AUTH_SECRET` with `openssl rand -base64 32`. Logbook
   refuses to start in production with the example value from `.env.example`.
-- Serve Logbuch over HTTPS only, and set `LOGBUCH_BASE_URL` to that HTTPS URL.
+- Serve Logbook over HTTPS only, and set `LOGBOOK_BASE_URL` to that HTTPS URL.
 - The Keycloak service account needs only the `view-users` role of
   `realm-management`.
 - Set `OIDC_TRUST_EMAIL=true` only if people cannot choose their own email

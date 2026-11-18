@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Meldgrove Logbuch (Logbuch for short) is a self-hosted log of decisions,
+Logbook is a self-hosted log of decisions,
 updates, and learnings with a consent-based decision process. User
 documentation is in `docs/`; contributor setup is in `CONTRIBUTING.md`.
 
@@ -33,7 +33,7 @@ with shadcn/ui (Radix), pino, Vitest, Playwright.
 - Every page, Server Action, and route handler calls `requireUser()` or
   `requireAdmin()` from `src/lib/auth/session.ts`. Layouts do not re-render
   on navigation, so a check in a layout is not enough.
-- Never delete Logbuch data. The only exceptions are unsubmitted drafts and
+- Never delete Logbook data. The only exceptions are unsubmitted drafts and
   Better Auth sessions. Triggers in `drizzle/0001_no_deletion.sql` enforce it,
   and the audit log is append-only. People who leave lose access; teams and
   tags are deactivated.
@@ -89,16 +89,15 @@ with shadcn/ui (Radix), pino, Vitest, Playwright.
 - Change the schema in `src/lib/db/schema.ts`, then run `npm run db:generate`
   and commit the migration. CI fails if they differ.
 - Read application settings only through `src/lib/config.ts`, and
-  operational settings (`LOG_LEVEL`, `LOGBUCH_PROCESS`,
+  operational settings (`LOG_LEVEL`, `LOGBOOK_PROCESS`,
   `WORKER_HEARTBEAT_FILE`, `MIGRATIONS_DIR`) through `envValue()` in
   `src/lib/env.ts`. Both treat blank values as unset. Framework variables
   (`NODE_ENV`, `NEXT_RUNTIME`, `TZ`) are read directly. Document every new
   variable in `docs/configuration.md`.
 - UI text is English (US).
-- The product name is Meldgrove Logbuch: page titles, the login page, the
-  sidebar, and the email sender name use it; running text says Logbuch.
-  Technical names stay as they are (`LOGBUCH_*` variables, the `logbuch`
-  database and Keycloak realm, the `Logbuch-*` webhook headers).
+- Use Logbook in the UI, documentation, and notification text. Use
+  `LOGBOOK_*` for environment variables, `logbook` for the default database
+  and development Keycloak realm, and `Logbook-*` for webhook headers.
 
 ## Commands
 
@@ -107,7 +106,7 @@ docker compose -f compose.dev.yaml up -d   # PostgreSQL 18 (port 55432) and Keyc
 cp .env.example .env.local
 npm ci
 npm run db:migrate
-npm run dev                                # http://localhost:3000, users erika / adam / olga, password logbuch-dev
+npm run dev                                # http://localhost:3000, users erika / adam / olga, password logbook-dev
 npm run worker                             # pg-boss worker in a second terminal
 
 npm run lint
@@ -132,11 +131,11 @@ export BETTER_AUTH_SECRET="$(openssl rand -base64 32)" NODE_ENV=production TZ=Eu
 node dist/migrate.mjs
 node .next/standalone/server.js &
 node dist/worker.mjs &
-docker compose -f compose.dev.yaml exec postgres psql -U logbuch -c "drop database if exists logbuch_manual with (force)" -c "create database logbuch_manual"
-DATABASE_URL=postgres://logbuch:logbuch@localhost:55432/logbuch_manual DIRECTORY=manual \
-  INITIAL_ADMIN_EMAILS=adam@example.test LOGBUCH_BASE_URL=http://localhost:3001 PORT=3001 \
+docker compose -f compose.dev.yaml exec postgres psql -U logbook -c "drop database if exists logbook_manual with (force)" -c "create database logbook_manual"
+DATABASE_URL=postgres://logbook:logbook@localhost:55432/logbook_manual DIRECTORY=manual \
+  INITIAL_ADMIN_EMAILS=adam@example.test LOGBOOK_BASE_URL=http://localhost:3001 PORT=3001 \
   sh -c 'node dist/migrate.mjs && node .next/standalone/server.js' &
-DATABASE_URL=postgres://logbuch:logbuch@localhost:55432/logbuch npm run test:e2e
+DATABASE_URL=postgres://logbook:logbook@localhost:55432/logbook npm run test:e2e
 ```
 
 The proposal tests move deadlines into the past in the database instead of
@@ -150,7 +149,7 @@ repository's Actions settings enforce both, so a workflow with any other
 action does not start. Use tools such as Docker through their command line
 instead. Maintainers release by hand with `.github/workflows/release.yml`
 (Actions → Release → Run workflow): it tags the next version, taken from the
-latest `vX.Y.Z` tag, and publishes the image `ghcr.io/meldgrove/logbuch` for
+latest `vX.Y.Z` tag, and publishes the image `ghcr.io/meldgrove/logbook` for
 amd64 and arm64 and a GitHub release (`CONTRIBUTING.md` has the steps). No
 file holds the version: `package.json` stays at `0.0.0`. Release notes come
 from pull request titles; label a pull request `breaking` when admins must

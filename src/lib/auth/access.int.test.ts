@@ -22,7 +22,7 @@ function syncWith(...ids: string[]) {
 
 /** The Keycloak directory, whose login sync is `run`. */
 function keycloak(run: DirectorySync["run"] = vi.fn()) {
-  return createKeycloakDirectory({ accessGroup: "/logbuch", adminGroup: "/logbuch-admins", run });
+  return createKeycloakDirectory({ accessGroup: "/logbook", adminGroup: "/logbook-admins", run });
 }
 
 /** A Better Auth user who logged in with the OIDC provider, and that login. */

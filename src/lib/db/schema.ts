@@ -32,7 +32,7 @@ import type { DateFormat } from "@/lib/preferences";
  * Database schema. Migrations are generated from this file with
  * `npm run db:generate` and live in `drizzle/`.
  *
- * No row in the Logbuch tables is ever deleted. People who lose access keep
+ * No row in the Logbook tables is ever deleted. People who lose access keep
  * their row with `has_access = false`. Better Auth may delete sessions.
  * Database triggers enforce this (drizzle/0001_no_deletion.sql): entries can
  * only be deleted as unsubmitted drafts, and the audit log is append-only.
@@ -123,13 +123,13 @@ export const authVerification = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// People and teams: managed in Logbuch (manual directory) or synced from
+// People and teams: managed in Logbook (manual directory) or synced from
 // Keycloak (keycloak directory)
 // ---------------------------------------------------------------------------
 
 export const team = pgTable("team", {
   id: uuidv7PrimaryKey(),
-  /** ID of the team in the external directory (the Keycloak group ID); empty for teams managed in Logbuch. */
+  /** ID of the team in the external directory (the Keycloak group ID); empty for teams managed in Logbook. */
   externalId: text("external_id").unique(),
   name: text("name").notNull(),
   isActive: boolean("is_active").notNull().default(true),
@@ -141,7 +141,7 @@ export const person = pgTable(
   "person",
   {
     id: uuidv7PrimaryKey(),
-    /** ID of the person in the external directory (the Keycloak user ID); empty for people managed in Logbuch. */
+    /** ID of the person in the external directory (the Keycloak user ID); empty for people managed in Logbook. */
     externalId: text("external_id").unique(),
     /**
      * The OIDC `sub`. Links the person to Better Auth's account row. Empty for
@@ -155,7 +155,7 @@ export const person = pgTable(
     isAdmin: boolean("is_admin").notNull().default(false),
     /** When `has_access` last changed. */
     accessChangedAt: timestamptz("access_changed_at").notNull().defaultNow(),
-    /** Last directory sync that listed the person; empty for people managed in Logbuch. */
+    /** Last directory sync that listed the person; empty for people managed in Logbook. */
     lastSeenInDirectoryAt: timestamptz("last_seen_in_directory_at"),
     /** IANA time zone for dates and times; empty means the server's time zone. */
     timeZone: text("time_zone"),
@@ -175,7 +175,7 @@ export const person = pgTable(
 );
 
 /**
- * Months in which a person opened Logbuch, for the "monthly active users"
+ * Months in which a person opened Logbook, for the "monthly active users"
  * statistic. One row per person and month, nothing finer.
  */
 export const personActiveMonth = pgTable(
@@ -614,7 +614,7 @@ export const appSetting = pgTable("app_setting", {
 // Notifications
 // ---------------------------------------------------------------------------
 
-/** `slack_channel`: a post to the Logbuch Slack channel, with no recipient person. */
+/** `slack_channel`: a post to the Logbook Slack channel, with no recipient person. */
 export const NOTIFICATION_CHANNELS = ["slack", "email", "slack_channel"] as const;
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 export const DELIVERY_STATUSES = ["pending", "sent", "skipped", "failed"] as const;
@@ -632,7 +632,7 @@ export const notificationDelivery = pgTable(
     deliveryKey: text("delivery_key").notNull().unique(),
     event: text("event").notNull(),
     entryId: uuid("entry_id").references(() => entry.id),
-    /** Empty exactly for posts to the Logbuch Slack channel. */
+    /** Empty exactly for posts to the Logbook Slack channel. */
     recipientId: uuid("recipient_id").references(() => person.id),
     channel: text("channel").$type<NotificationChannel>().notNull(),
     status: text("status").$type<DeliveryStatus>().notNull().default("pending"),

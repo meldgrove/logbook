@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * End-to-end tests against running Logbuch production builds, the development
+ * End-to-end tests against running Logbook production builds, the development
  * Keycloak, and PostgreSQL. Two instances run side by side:
  *
  * - `keycloak`: DIRECTORY=keycloak on port 3000 (E2E_BASE_URL).

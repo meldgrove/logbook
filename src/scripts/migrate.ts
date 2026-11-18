@@ -23,7 +23,7 @@ async function waitForDatabase(pool: Pool, attempts = 30): Promise<void> {
 }
 
 async function main() {
-  const pool = createPool(getDatabaseConfig().DATABASE_URL, "logbuch-migrate");
+  const pool = createPool(getDatabaseConfig().DATABASE_URL, "logbook-migrate");
   try {
     await waitForDatabase(pool);
     const migrationsFolder = envValue("MIGRATIONS_DIR") ?? path.resolve(process.cwd(), "drizzle");

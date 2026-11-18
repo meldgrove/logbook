@@ -23,7 +23,7 @@ export interface PlannedDelivery {
   key: string;
   event: string;
   entryId: string;
-  /** Empty for posts to the Logbuch Slack channel. */
+  /** Empty for posts to the Logbook Slack channel. */
   recipientId: string | null;
   channel: NotificationChannel;
   message: NotificationMessage;
@@ -46,7 +46,7 @@ export interface PostInfo {
 export interface ProposalContext {
   entry: EntryInfo;
   s: ProposalSnapshot;
-  /** For the posts to the Logbuch Slack channel. */
+  /** For the posts to the Logbook Slack channel. */
   post: PostInfo;
   /** Who caused the event. They are not notified about it. */
   actor: { personId: string; name: string } | null;
@@ -290,7 +290,7 @@ export function planLostAccess(rows: LostAccessRow[]): PlannedDelivery[] {
   return [...groups.values()].flatMap(({ first: { entry, proposerId, personId, name, since }, roles }) => {
     const order: LostRole[] = ["decider", "consent_giver", "feedback_giver"];
     const named = order.filter((role) => roles.includes(role)).map((role) => LOST_ROLE_NAMES[role]);
-    const text = `${name} no longer has access to Logbuch and is ${named.join(" and ")} on this proposal. Replace them so the decision can go ahead.`;
+    const text = `${name} no longer has access to Logbook and is ${named.join(" and ")} on this proposal. Replace them so the decision can go ahead.`;
     return deliveries(entry.id, "proposal.lost_access", `${entry.id}:${personId}:${since.toISOString()}`, "slack", [
       [proposerId, message(entry, "Participant lost access", text)],
     ]);
@@ -468,13 +468,13 @@ export function planReviewReminder(ctx: ReviewContext): PlannedDelivery[] {
 }
 
 // ---------------------------------------------------------------------------
-// The Logbuch Slack channel
+// The Logbook Slack channel
 // ---------------------------------------------------------------------------
 
 export type ChannelEvent = "submitted" | "decided" | "rejected" | EntryType;
 
 /**
- * One post per entry and event to the Logbuch Slack channel, with the
+ * One post per entry and event to the Logbook Slack channel, with the
  * summary, impact, and affected teams. Never the proposal text.
  */
 function channelPost(entry: EntryInfo, post: PostInfo, event: ChannelEvent, msg: NotificationMessage): PlannedDelivery {

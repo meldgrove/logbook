@@ -2,7 +2,7 @@ import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 const testDatabaseUrl =
-  process.env.TEST_DATABASE_URL ?? "postgres://logbuch:logbuch@localhost:55432/logbuch_test";
+  process.env.TEST_DATABASE_URL ?? "postgres://logbook:logbook@localhost:55432/logbook_test";
 
 // Deadlines and statistics follow the server's time zone. Tests run in one
 // with daylight saving time, so that they cover the switch.
