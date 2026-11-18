@@ -49,8 +49,9 @@ Logbook itself; see [Deployment](docs/deployment.md).
 - [Configuration](docs/configuration.md): every environment variable
 - [Identity and access](docs/identity-and-access.md): OpenID Connect, the
   manual directory, and the Keycloak directory
-- [Deployment](docs/deployment.md): Docker, health checks, operations, and the
-  CSV import of old entries
+- [Deployment](docs/deployment.md): running it on Coolify or a Debian
+  server, health checks, operations, automatic updates, and the CSV import
+  of old entries
 - [Decision process](docs/decision-process.md): how proposals become
   decisions
 - [Webhook](docs/webhooks.md): payload and signature
