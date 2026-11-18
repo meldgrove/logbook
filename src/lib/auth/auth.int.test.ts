@@ -23,7 +23,7 @@ beforeAll(async () => {
   provider = await startFakeOidcProvider();
   auth = createAuth({
     config: {
-      LOGBUCH_BASE_URL: BASE_URL,
+      LOGBOOK_BASE_URL: BASE_URL,
       BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
       OIDC_ISSUER: provider.issuer,
       OIDC_CLIENT_ID: provider.clientId,
@@ -35,7 +35,7 @@ beforeAll(async () => {
     db,
   });
   // The auth that session.ts uses.
-  (globalThis as { logbuchAuth?: Auth }).logbuchAuth = auth;
+  (globalThis as { logbookAuth?: Auth }).logbookAuth = auth;
 });
 beforeEach(() => testDb.reset());
 afterAll(async () => {

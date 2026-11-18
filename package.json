@@ -1,5 +1,5 @@
 {
-  "name": "logbuch",
+  "name": "logbook",
   "version": "0.0.0",
   "license": "Apache-2.0",
   "private": true,
@@ -17,10 +17,10 @@
     "test:integration": "vitest run --project integration",
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "LOGBUCH_PROCESS=migrate tsx --env-file-if-exists=.env.local src/scripts/migrate.ts",
-    "worker": "LOGBUCH_PROCESS=worker tsx --env-file-if-exists=.env.local src/workers/main.ts",
-    "directory:sync": "LOGBUCH_PROCESS=directory-sync tsx --env-file-if-exists=.env.local src/scripts/directory-sync.ts",
-    "import:entries": "LOGBUCH_PROCESS=import-entries tsx --env-file-if-exists=.env.local src/scripts/import-entries.ts"
+    "db:migrate": "LOGBOOK_PROCESS=migrate tsx --env-file-if-exists=.env.local src/scripts/migrate.ts",
+    "worker": "LOGBOOK_PROCESS=worker tsx --env-file-if-exists=.env.local src/workers/main.ts",
+    "directory:sync": "LOGBOOK_PROCESS=directory-sync tsx --env-file-if-exists=.env.local src/scripts/directory-sync.ts",
+    "import:entries": "LOGBOOK_PROCESS=import-entries tsx --env-file-if-exists=.env.local src/scripts/import-entries.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^11.12.0",

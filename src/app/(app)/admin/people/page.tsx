@@ -15,7 +15,7 @@ import { invitePersonAction, setPersonAccessAction, setPersonAdminAction, update
 export const metadata: Metadata = { title: "People" };
 
 /**
- * Everyone Logbuch knows. With the manual directory, admins invite people,
+ * Everyone Logbook knows. With the manual directory, admins invite people,
  * change names and teams, and give or take away access and admin rights.
  * Nobody is deleted: people who leave keep their name on past entries.
  */
@@ -35,7 +35,7 @@ export default async function PeoplePage() {
         description={
           editable
             ? "Invited people get access at their first login with the same verified email address. People are never deleted; take away their access instead."
-            : "People, teams, and admin rights come from Keycloak. Change them there; Logbuch syncs every 15 minutes."
+            : "People, teams, and admin rights come from Keycloak. Change them there; Logbook syncs every 15 minutes."
         }
       />
       {editable ? (
@@ -44,7 +44,7 @@ export default async function PeoplePage() {
             <CardTitle>
               <h2 id="invite">Invite a person</h2>
             </CardTitle>
-            <CardDescription>They sign in with the identity provider; Logbuch matches their verified email address once.</CardDescription>
+            <CardDescription>They sign in with the identity provider; Logbook matches their verified email address once.</CardDescription>
           </CardHeader>
           <CardContent>
             <InvitePersonForm action={invitePersonAction} teams={activeTeams} />

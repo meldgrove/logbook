@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for helping with Meldgrove Logbuch. Bug reports, ideas, and pull requests are
+Thank you for helping with Logbook. Bug reports, ideas, and pull requests are
 welcome.
 
 ## Development setup
@@ -19,7 +19,7 @@ npm run worker                             # in a second terminal
 `compose.yaml` is the production setup. To leave out `-f compose.dev.yaml` in
 every Compose command, `export COMPOSE_FILE=compose.dev.yaml` in your shell.
 
-Test users in the development Keycloak (password `logbuch-dev`): `erika`
+Test users in the development Keycloak (password `logbook-dev`): `erika`
 (has access), `adam` (admin), and `olga` (no access). The Keycloak admin
 console is at http://localhost:8090 (`admin` / `admin`).
 
@@ -129,7 +129,7 @@ Otherwise it:
 - raises the latest `vX.Y.Z` tag by the chosen part, tags the commit, and
   pushes only the tag. The first release starts from 0.0.0, so minor makes it
   0.1.0;
-- publishes the image `ghcr.io/meldgrove/logbuch` for amd64 and arm64 as
+- publishes the image `ghcr.io/meldgrove/logbook` for amd64 and arm64 as
   `X.Y.Z`, `X.Y`, from 1.0.0 also `X`, and `latest`;
 - attests where the image was built and creates the GitHub Release;
 - moves the branch `stable` to the released commit. Platforms that read
@@ -148,16 +148,16 @@ with the same choice of patch, minor or major afterwards.
 Pull requests that change the `Dockerfile`, `.dockerignore`,
 `docker-entrypoint.sh`, or the workflow build and start both images without
 publishing. Release images set `APP_VERSION`: `/-/healthz` reports it, and
-Sentry names the release `logbuch@X.Y.Z` unless `SENTRY_RELEASE` is set.
+Sentry names the release `logbook@X.Y.Z` unless `SENTRY_RELEASE` is set.
 
 ### Repository settings
 
 - **Package visibility:** the GitHub Container Registry creates a new package
   as private. After the first release, an organization owner makes it public
   once: on the package page
-  (https://github.com/orgs/meldgrove/packages/container/package/logbuch),
+  (https://github.com/orgs/meldgrove/packages/container/package/logbook),
   **Package settings** → **Change visibility** → **Public**. Then check that
-  `docker pull ghcr.io/meldgrove/logbuch:<version>` works without logging in.
+  `docker pull ghcr.io/meldgrove/logbook:<version>` works without logging in.
 - **Immutable releases** are on: a published release's tag can never move or
   be deleted, while its notes stay editable. Fix a bad release with a new
   patch release.

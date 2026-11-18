@@ -14,7 +14,7 @@ export const TAG_NAME_MAX = 40;
 
 /** Shown on every form that creates or changes entry content. */
 export const PERSONAL_DATA_NOTICE =
-  "Logbuch entries are visible to everyone with access and may be shared with connected systems. Do not enter personal data: no health, salary, application, or HR topics, and no assessments of individual people.";
+  "Logbook entries are visible to everyone with access and may be shared with connected systems. Do not enter personal data: no health, salary, application, or HR topics, and no assessments of individual people.";
 export const PERSONAL_DATA_CONFIRMATION = "I confirm that this entry contains no personal data.";
 
 export const HOW_DECIDED = ["integrative_process", "role_decision", "management_decision", "other"] as const;

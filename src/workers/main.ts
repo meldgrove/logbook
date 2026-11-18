@@ -40,7 +40,7 @@ async function main() {
   if (sentry) Sentry.init({ ...sentry, enableRuntimeChannelInjection: false });
   const boss = new PgBoss({
     connectionString: getDatabaseConfig().DATABASE_URL,
-    application_name: "logbuch-worker-pgboss",
+    application_name: "logbook-worker-pgboss",
   });
   boss.on("error", (error) => {
     logger.error({ err: error }, "pg-boss error");
@@ -92,7 +92,7 @@ async function main() {
 
   channels.webhook = await setUpWebhookJobs(boss, {
     config: getWebhookConfig(),
-    baseUrl: notificationConfig.LOGBUCH_BASE_URL,
+    baseUrl: notificationConfig.LOGBOOK_BASE_URL,
     db: getDb,
   });
 

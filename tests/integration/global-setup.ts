@@ -9,7 +9,7 @@ import { Client, Pool } from "pg";
  */
 export default async function setup() {
   const url = new URL(
-    process.env.TEST_DATABASE_URL ?? "postgres://logbuch:logbuch@localhost:55432/logbuch_test",
+    process.env.TEST_DATABASE_URL ?? "postgres://logbook:logbook@localhost:55432/logbook_test",
   );
   const database = url.pathname.slice(1);
   if (!/^[a-z0-9_]+$/.test(database) || !database.endsWith("_test")) {

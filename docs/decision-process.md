@@ -1,6 +1,6 @@
 # Decision process
 
-Logbuch knows three types of entries:
+Logbook knows three types of entries:
 
 | Type | What it is |
 |---|---|

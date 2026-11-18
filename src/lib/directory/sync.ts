@@ -42,7 +42,7 @@ const SYNC_LOCK_KEY = 7_261_001;
  * - People in the snapshot have access; their admin flag and team come from
  *   the directory.
  * - People missing from the snapshot lose access and their sessions end.
- *   Their rows stay: Logbuch never deletes people.
+ *   Their rows stay: Logbook never deletes people.
  * - A failed fetch, or a snapshot without people or teams, keeps the last
  *   projection.
  */

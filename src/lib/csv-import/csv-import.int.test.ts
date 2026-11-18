@@ -54,7 +54,7 @@ describe("the CSV import", () => {
     expect(text).toContain("Decided on 30.04.2024 by Dan Decider; Role decision; team Engineering.");
     expect(text).toContain("Impact: Large; reversibility: One-way.");
     expect(text).toContain("    We use three lead stages.");
-    expect(text).toContain("Not imported: gone@example.org has no Logbuch access.");
+    expect(text).toContain("Not imported: gone@example.org has no Logbook access.");
     expect(text).toContain(`--confirm-no-personal-data ${report.fingerprint}`);
   });
 

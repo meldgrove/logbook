@@ -12,11 +12,11 @@ export default function NoAccessPage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <Logo className="mb-2 size-10" />
-          <h1 className="text-xl font-semibold">No access to Logbuch</h1>
+          <h1 className="text-xl font-semibold">No access to Logbook</h1>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 text-sm">
           <p>
-            You signed in, but your account has no access to Logbuch. An admin needs to invite you, or to add you to the
+            You signed in, but your account has no access to Logbook. An admin needs to invite you, or to add you to the
             right group in your organization&apos;s directory.
           </p>
           <p>If you were invited, sign in with the email address of your invitation. If you think this is wrong, contact your administrator.</p>

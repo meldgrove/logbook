@@ -1,18 +1,18 @@
 {
-  "realm": "logbuch",
-  "displayName": "Meldgrove Logbuch (development)",
+  "realm": "logbook",
+  "displayName": "Logbook (development)",
   "enabled": true,
   "sslRequired": "none",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "groups": [
     {
-      "name": "logbuch",
-      "path": "/logbuch"
+      "name": "logbook",
+      "path": "/logbook"
     },
     {
-      "name": "logbuch-admins",
-      "path": "/logbuch-admins"
+      "name": "logbook-admins",
+      "path": "/logbook-admins"
     },
     {
       "name": "teams",
@@ -31,13 +31,13 @@
   ],
   "clients": [
     {
-      "clientId": "logbuch",
-      "name": "Meldgrove Logbuch",
+      "clientId": "logbook",
+      "name": "Logbook",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "logbuch-dev-client-secret",
+      "secret": "logbook-dev-client-secret",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
@@ -59,9 +59,9 @@
   ],
   "users": [
     {
-      "username": "service-account-logbuch",
+      "username": "service-account-logbook",
       "enabled": true,
-      "serviceAccountClientId": "logbuch",
+      "serviceAccountClientId": "logbook",
       "clientRoles": {
         "realm-management": [
           "view-users"
@@ -77,13 +77,13 @@
       "lastName": "Employee",
       "enabled": true,
       "groups": [
-        "/logbuch",
+        "/logbook",
         "/teams/Engineering"
       ],
       "credentials": [
         {
           "type": "password",
-          "value": "logbuch-dev",
+          "value": "logbook-dev",
           "temporary": false
         }
       ]
@@ -97,13 +97,13 @@
       "lastName": "Admin",
       "enabled": true,
       "groups": [
-        "/logbuch-admins",
+        "/logbook-admins",
         "/teams/Operations"
       ],
       "credentials": [
         {
           "type": "password",
-          "value": "logbuch-dev",
+          "value": "logbook-dev",
           "temporary": false
         }
       ]
@@ -119,7 +119,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "logbuch-dev",
+          "value": "logbook-dev",
           "temporary": false
         }
       ]

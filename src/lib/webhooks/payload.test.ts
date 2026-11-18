@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { toWebhookPayload, type EntryFacts } from "./payload";
 import { payloadHash } from "./sync";
 
-const BASE_URL = "https://logbuch.example/";
+const BASE_URL = "https://logbook.example/";
 const PUBLISHED_AT = new Date("2026-11-04T09:00:00Z");
 const DECIDED_AT = new Date("2026-11-06T15:00:00Z");
 
@@ -81,7 +81,7 @@ describe("the payload", () => {
       entry: {
         id: "e1",
         ref: "LB-12",
-        url: "https://logbuch.example/e/LB-12",
+        url: "https://logbook.example/e/LB-12",
         type: "update",
         status: "published",
         title: "New on-call rota",

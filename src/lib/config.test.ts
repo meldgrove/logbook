@@ -12,20 +12,20 @@ import {
 } from "./config";
 
 const auth = {
-  LOGBUCH_BASE_URL: "https://logbuch.example.org/",
+  LOGBOOK_BASE_URL: "https://logbook.example.org/",
   BETTER_AUTH_SECRET: "x".repeat(32),
   OIDC_ISSUER: "https://auth.example.org/realms/acme/",
-  OIDC_CLIENT_ID: "logbuch",
+  OIDC_CLIENT_ID: "logbook",
   OIDC_CLIENT_SECRET: "secret",
 };
 
 const keycloakDirectory = {
   DIRECTORY: "keycloak",
   OIDC_ISSUER: "https://auth.example.org/realms/acme",
-  OIDC_CLIENT_ID: "logbuch",
+  OIDC_CLIENT_ID: "logbook",
   OIDC_CLIENT_SECRET: "secret",
-  KEYCLOAK_ACCESS_GROUP: "/logbuch",
-  KEYCLOAK_ADMIN_GROUP: "/logbuch-admins",
+  KEYCLOAK_ACCESS_GROUP: "/logbook",
+  KEYCLOAK_ADMIN_GROUP: "/logbook-admins",
   KEYCLOAK_TEAMS_GROUP: "/teams",
 };
 
@@ -34,13 +34,21 @@ const manualDirectory = { INITIAL_ADMIN_EMAILS: "owner@example.org" };
 describe("parseAuthConfig", () => {
   it("strips trailing slashes from URLs and defaults the scopes", () => {
     const config = parseAuthConfig(auth);
-    expect(config.LOGBUCH_BASE_URL).toBe("https://logbuch.example.org");
+    expect(config.LOGBOOK_BASE_URL).toBe("https://logbook.example.org");
     expect(config.OIDC_ISSUER).toBe("https://auth.example.org/realms/acme");
     expect(config.OIDC_SCOPES).toBe("openid profile email");
   });
 
   it("treats blank values as missing", () => {
     expect(() => parseAuthConfig({ ...auth, OIDC_CLIENT_SECRET: "  " })).toThrow(/OIDC_CLIENT_SECRET/);
+  });
+
+  it("accepts the previous base URL variable for web and worker", () => {
+    const legacy = { LOGBUCH_BASE_URL: "https://existing.example.org/" };
+    const config = { ...auth, ...legacy, LOGBOOK_BASE_URL: " " };
+    expect(parseAuthConfig(config).LOGBOOK_BASE_URL).toBe("https://existing.example.org");
+    expect(parseNotificationConfig(legacy).LOGBOOK_BASE_URL).toBe("https://existing.example.org");
+    expect(parseAuthConfig({ ...auth, ...legacy }).LOGBOOK_BASE_URL).toBe("https://logbook.example.org");
   });
 
   it("requires a long secret, and not the example one in production", () => {
@@ -76,13 +84,13 @@ describe("parseDirectoryConfig", () => {
   it("uses the login client for the Keycloak directory unless it has its own", () => {
     expect(parseDirectoryConfig(keycloakDirectory)).toMatchObject({
       DIRECTORY: "keycloak",
-      KEYCLOAK_CLIENT_ID: "logbuch",
+      KEYCLOAK_CLIENT_ID: "logbook",
       KEYCLOAK_CLIENT_SECRET: "secret",
-      KEYCLOAK_ACCESS_GROUP: "/logbuch",
+      KEYCLOAK_ACCESS_GROUP: "/logbook",
     });
     expect(
-      parseDirectoryConfig({ ...keycloakDirectory, KEYCLOAK_CLIENT_ID: "logbuch-directory", KEYCLOAK_CLIENT_SECRET: "other" }),
-    ).toMatchObject({ KEYCLOAK_CLIENT_ID: "logbuch-directory", KEYCLOAK_CLIENT_SECRET: "other" });
+      parseDirectoryConfig({ ...keycloakDirectory, KEYCLOAK_CLIENT_ID: "logbook-directory", KEYCLOAK_CLIENT_SECRET: "other" }),
+    ).toMatchObject({ KEYCLOAK_CLIENT_ID: "logbook-directory", KEYCLOAK_CLIENT_SECRET: "other" });
   });
 
   it("requires a Keycloak realm URL and all three group paths", () => {
@@ -90,7 +98,7 @@ describe("parseDirectoryConfig", () => {
     for (const name of ["KEYCLOAK_ACCESS_GROUP", "KEYCLOAK_ADMIN_GROUP", "KEYCLOAK_TEAMS_GROUP"]) {
       expect(() => parseDirectoryConfig({ ...keycloakDirectory, [name]: "" }), name).toThrow(name);
     }
-    expect(() => parseDirectoryConfig({ ...keycloakDirectory, KEYCLOAK_ACCESS_GROUP: "logbuch" })).toThrow(/group path/);
+    expect(() => parseDirectoryConfig({ ...keycloakDirectory, KEYCLOAK_ACCESS_GROUP: "logbook" })).toThrow(/group path/);
     expect(() => parseDirectoryConfig({ ...keycloakDirectory, KEYCLOAK_TEAMS_GROUP: "/org/teams/" })).toThrow(/group path/);
     expect(parseDirectoryConfig({ ...keycloakDirectory, KEYCLOAK_TEAMS_GROUP: "/org/teams" })).toMatchObject({
       KEYCLOAK_TEAMS_GROUP: "/org/teams",
@@ -112,7 +120,7 @@ describe("validateWebConfig", () => {
     }
     expect(error).toBeInstanceOf(ConfigError);
     const message = (error as Error).message;
-    for (const name of ["DATABASE_URL", "LOGBUCH_BASE_URL", "BETTER_AUTH_SECRET", "OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "INITIAL_ADMIN_EMAILS"]) {
+    for (const name of ["DATABASE_URL", "LOGBOOK_BASE_URL", "BETTER_AUTH_SECRET", "OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "INITIAL_ADMIN_EMAILS"]) {
       expect(message).toContain(name);
     }
     expect(message).not.toContain("KEYCLOAK");
@@ -121,13 +129,13 @@ describe("validateWebConfig", () => {
   });
 
   it("passes with a complete configuration", () => {
-    expect(() => validateWebConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbuch", ...auth, ...manualDirectory })).not.toThrow();
-    expect(() => validateWebConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbuch", ...auth, ...keycloakDirectory })).not.toThrow();
+    expect(() => validateWebConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbook", ...auth, ...manualDirectory })).not.toThrow();
+    expect(() => validateWebConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbook", ...auth, ...keycloakDirectory })).not.toThrow();
   });
 });
 
 describe("parseNotificationConfig", () => {
-  const base = { LOGBUCH_BASE_URL: "https://logbuch.example.org/" };
+  const base = { LOGBOOK_BASE_URL: "https://logbook.example.org/" };
 
   it("sends for real in production and only logs elsewhere", () => {
     expect(parseNotificationConfig({ ...base, NODE_ENV: "production" }).NOTIFICATION_TRANSPORT).toBe("live");
@@ -138,17 +146,17 @@ describe("parseNotificationConfig", () => {
   it("treats Slack and email as optional, blank as unset", () => {
     const config = parseNotificationConfig({ ...base, SLACK_BOT_TOKEN: "", SMTP_URL: " ", MAILERSEND_API_TOKEN: " ", MAIL_FROM: "" });
     expect(config).toMatchObject({
-      LOGBUCH_BASE_URL: "https://logbuch.example.org",
+      LOGBOOK_BASE_URL: "https://logbook.example.org",
       SLACK_BOT_TOKEN: undefined,
       SMTP_URL: undefined,
       MAILERSEND_API_TOKEN: undefined,
-      MAIL_FROM_NAME: "Meldgrove Logbuch",
+      MAIL_FROM_NAME: "Logbook",
     });
   });
 
   it("takes a Slack channel ID, not a channel name", () => {
-    expect(parseNotificationConfig({ ...base, SLACK_CHANNEL_ID: "C07LOGBUCH" }).SLACK_CHANNEL_ID).toBe("C07LOGBUCH");
-    expect(() => parseNotificationConfig({ ...base, SLACK_CHANNEL_ID: "#logbuch" })).toThrow(/SLACK_CHANNEL_ID/);
+    expect(parseNotificationConfig({ ...base, SLACK_CHANNEL_ID: "C07LOGBOOK" }).SLACK_CHANNEL_ID).toBe("C07LOGBOOK");
+    expect(() => parseNotificationConfig({ ...base, SLACK_CHANNEL_ID: "#logbook" })).toThrow(/SLACK_CHANNEL_ID/);
   });
 
   it("rejects a user token for Slack", () => {
@@ -156,24 +164,24 @@ describe("parseNotificationConfig", () => {
   });
 
   it("needs a sender for email, and one way to send it", () => {
-    expect(parseNotificationConfig({ ...base, SMTP_URL: "smtps://user:pass@mail.example.org:465", MAIL_FROM: "logbuch@example.org" }).SMTP_URL).toBe(
+    expect(parseNotificationConfig({ ...base, SMTP_URL: "smtps://user:pass@mail.example.org:465", MAIL_FROM: "logbook@example.org" }).SMTP_URL).toBe(
       "smtps://user:pass@mail.example.org:465",
     );
     expect(() => parseNotificationConfig({ ...base, SMTP_URL: "smtp://mail.example.org" })).toThrow(/MAIL_FROM/);
     expect(() => parseNotificationConfig({ ...base, MAILERSEND_API_TOKEN: "mlsn.abc" })).toThrow(/MAIL_FROM/);
     expect(() => parseNotificationConfig({ ...base, MAILERSEND_API_TOKEN: "mlsn.abc", MAIL_FROM: "not-an-email" })).toThrow(/MAIL_FROM/);
-    expect(() => parseNotificationConfig({ ...base, SMTP_URL: "https://mail.example.org", MAIL_FROM: "logbuch@example.org" })).toThrow(/SMTP_URL/);
+    expect(() => parseNotificationConfig({ ...base, SMTP_URL: "https://mail.example.org", MAIL_FROM: "logbook@example.org" })).toThrow(/SMTP_URL/);
     expect(() =>
-      parseNotificationConfig({ ...base, SMTP_URL: "smtp://mail.example.org", MAILERSEND_API_TOKEN: "mlsn.abc", MAIL_FROM: "logbuch@example.org" }),
+      parseNotificationConfig({ ...base, SMTP_URL: "smtp://mail.example.org", MAILERSEND_API_TOKEN: "mlsn.abc", MAIL_FROM: "logbook@example.org" }),
     ).toThrow(/either SMTP_URL or MAILERSEND_API_TOKEN/);
   });
 });
 
 describe("validateWorkerConfig", () => {
   it("needs the base URL for links in messages", () => {
-    expect(() => validateWorkerConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbuch", ...manualDirectory })).toThrow(/LOGBUCH_BASE_URL/);
+    expect(() => validateWorkerConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbook", ...manualDirectory })).toThrow(/LOGBOOK_BASE_URL/);
     expect(() =>
-      validateWorkerConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbuch", LOGBUCH_BASE_URL: "https://logbuch.example.org", ...manualDirectory }),
+      validateWorkerConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbook", LOGBOOK_BASE_URL: "https://logbook.example.org", ...manualDirectory }),
     ).not.toThrow();
   });
 });
@@ -181,10 +189,10 @@ describe("validateWorkerConfig", () => {
 describe("parseWebhookConfig", () => {
   it("is off without a URL and needs a long secret once the URL is set", () => {
     expect(parseWebhookConfig({ WEBHOOK_URL: "" })).toEqual({ WEBHOOK_URL: undefined, WEBHOOK_SECRET: undefined });
-    expect(() => parseWebhookConfig({ WEBHOOK_URL: "https://hooks.example.org/logbuch" })).toThrow(/WEBHOOK_SECRET/);
-    expect(() => parseWebhookConfig({ WEBHOOK_URL: "https://hooks.example.org/logbuch", WEBHOOK_SECRET: "short" })).toThrow(/WEBHOOK_SECRET/);
-    expect(parseWebhookConfig({ WEBHOOK_URL: "https://hooks.example.org/logbuch", WEBHOOK_SECRET: "s".repeat(32) }).WEBHOOK_URL).toBe(
-      "https://hooks.example.org/logbuch",
+    expect(() => parseWebhookConfig({ WEBHOOK_URL: "https://hooks.example.org/logbook" })).toThrow(/WEBHOOK_SECRET/);
+    expect(() => parseWebhookConfig({ WEBHOOK_URL: "https://hooks.example.org/logbook", WEBHOOK_SECRET: "short" })).toThrow(/WEBHOOK_SECRET/);
+    expect(parseWebhookConfig({ WEBHOOK_URL: "https://hooks.example.org/logbook", WEBHOOK_SECRET: "s".repeat(32) }).WEBHOOK_URL).toBe(
+      "https://hooks.example.org/logbook",
     );
   });
 });

@@ -33,7 +33,7 @@ export function PreferencesForm({ action, timeZone, dateFormat, serverTimeZone, 
           aria-describedby={describedBy("timeZone", errors.timeZone, "hint")}
           wrapperClassName="w-full"
         >
-          <NativeSelectOption value="">Same as Logbuch ({serverTimeZone})</NativeSelectOption>
+          <NativeSelectOption value="">Same as Logbook ({serverTimeZone})</NativeSelectOption>
           {timeZones.map((zone) => (
             <NativeSelectOption key={zone} value={zone}>
               {zone.replaceAll("_", " ")}

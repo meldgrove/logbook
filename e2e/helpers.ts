@@ -1,13 +1,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page } from "@playwright/test";
 
-export const PASSWORD = "logbuch-dev";
+export const PASSWORD = "logbook-dev";
 
 /** Signs in through the development Keycloak. */
 export async function signIn(page: Page, username: string): Promise<void> {
   await page.goto("/login");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL(/\/realms\/logbuch\//);
+  await page.waitForURL(/\/realms\/logbook\//);
   await page.getByLabel("Username or email").fill(username);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign In" }).click();
@@ -16,8 +16,8 @@ export async function signIn(page: Page, username: string): Promise<void> {
 /** No WCAG 2.1 A/AA violations on the current page. */
 export async function expectAccessible(page: Page): Promise<void> {
   // Next.js streams the title after the page; after a client-side navigation
-  // axe could otherwise run before it is back. Every title ends in "Logbuch".
-  await expect(page).toHaveTitle(/Logbuch$/);
+  // axe could otherwise run before it is back. Every title ends in "Logbook".
+  await expect(page).toHaveTitle(/Logbook$/);
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   expect(results.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
 }
@@ -110,7 +110,7 @@ export async function deliveries(ref: string): Promise<Delivery[]> {
 }
 
 /** The development Keycloak, administered with its bootstrap admin (compose.dev.yaml). */
-const KEYCLOAK_URL = process.env.E2E_KEYCLOAK_URL ?? "http://localhost:8090";
+export const KEYCLOAK_URL = process.env.E2E_KEYCLOAK_URL ?? "http://localhost:8090";
 
 async function keycloakAdmin(path: string, init: RequestInit = {}): Promise<Response> {
   const token = await fetch(`${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token`, {
@@ -118,7 +118,7 @@ async function keycloakAdmin(path: string, init: RequestInit = {}): Promise<Resp
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "password", client_id: "admin-cli", username: "admin", password: "admin" }),
   }).then(async (response) => ((await response.json()) as { access_token: string }).access_token);
-  const response = await fetch(`${KEYCLOAK_URL}/admin/realms/logbuch${path}`, {
+  const response = await fetch(`${KEYCLOAK_URL}/admin/realms/logbook${path}`, {
     ...init,
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...init.headers },
   });

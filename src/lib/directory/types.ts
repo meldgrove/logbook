@@ -1,5 +1,5 @@
 /*
- * What an external directory (Keycloak) tells Logbuch: the people who have
+ * What an external directory (Keycloak) tells Logbook: the people who have
  * access, and the teams. A sync replaces the local projection with it.
  */
 

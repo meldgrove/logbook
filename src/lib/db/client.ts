@@ -23,17 +23,17 @@ export function createDb(pool: Pool): Database {
 
 // One pool per process. Kept on globalThis so that hot reload in development
 // does not open a new pool on every change.
-const globalForDb = globalThis as unknown as { logbuchPool?: Pool; logbuchDb?: Database };
+const globalForDb = globalThis as unknown as { logbookPool?: Pool; logbookDb?: Database };
 
 export function getPool(): Pool {
-  globalForDb.logbuchPool ??= createPool(
+  globalForDb.logbookPool ??= createPool(
     getDatabaseConfig().DATABASE_URL,
-    `logbuch-${envValue("LOGBUCH_PROCESS") ?? "web"}`,
+    `logbook-${envValue("LOGBOOK_PROCESS") ?? "web"}`,
   );
-  return globalForDb.logbuchPool;
+  return globalForDb.logbookPool;
 }
 
 export function getDb(): Database {
-  globalForDb.logbuchDb ??= createDb(getPool());
-  return globalForDb.logbuchDb;
+  globalForDb.logbookDb ??= createDb(getPool());
+  return globalForDb.logbookDb;
 }

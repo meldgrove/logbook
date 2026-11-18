@@ -12,7 +12,7 @@ import { serverDate } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Log something" };
 
-/** Log an update, a decision made outside Logbuch, or a learning. */
+/** Log an update, a decision made outside Logbook, or a learning. */
 export default async function LogPage({ searchParams }: PageProps<"/new/log">) {
   const { person } = await requireUser();
   const requested = (await searchParams).type;

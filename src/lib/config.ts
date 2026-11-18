@@ -26,8 +26,8 @@ const withoutTrailingSlash = (url: string) => url.replace(/\/+$/, "");
 /** The value of BETTER_AUTH_SECRET in `.env.example`, refused in production. */
 const EXAMPLE_SECRET = "development-secret-development-secret";
 
-/** A Keycloak group path such as "/logbuch" or "/staff/logbuch". */
-const groupPath = z.string().regex(/^\/[^/].*[^/]$|^\/[^/]$/, 'must be a group path such as "/logbuch"');
+/** A Keycloak group path such as "/logbook" or "/staff/logbook". */
+const groupPath = z.string().regex(/^\/[^/].*[^/]$|^\/[^/]$/, 'must be a group path such as "/logbook"');
 
 /** A list of email addresses, separated by commas, semicolons, or spaces. Lower-cased. */
 const emailList = z.preprocess(
@@ -55,13 +55,14 @@ function withDefaults(env: Env): Env {
   const value = (name: string) => blankAsUndefined(env[name]) as string | undefined;
   return {
     ...env,
+    LOGBOOK_BASE_URL: value("LOGBOOK_BASE_URL") ?? value("LOGBUCH_BASE_URL"),
     DIRECTORY: value("DIRECTORY") ?? "manual",
     OIDC_SCOPES: value("OIDC_SCOPES") ?? "openid profile email",
     KEYCLOAK_CLIENT_ID: value("KEYCLOAK_CLIENT_ID") ?? value("OIDC_CLIENT_ID"),
     KEYCLOAK_CLIENT_SECRET: value("KEYCLOAK_CLIENT_SECRET") ?? value("OIDC_CLIENT_SECRET"),
     // Production sends for real; development and tests only log.
     NOTIFICATION_TRANSPORT: value("NOTIFICATION_TRANSPORT") ?? (env.NODE_ENV === "production" ? "live" : "console"),
-    MAIL_FROM_NAME: value("MAIL_FROM_NAME") ?? "Meldgrove Logbuch",
+    MAIL_FROM_NAME: value("MAIL_FROM_NAME") ?? "Logbook",
   };
 }
 
@@ -72,7 +73,7 @@ const databaseSchema = z.object({
 const authSchema = z
   .object({
     NODE_ENV: z.string().optional(),
-    LOGBUCH_BASE_URL: required(httpUrl.transform(withoutTrailingSlash)),
+    LOGBOOK_BASE_URL: required(httpUrl.transform(withoutTrailingSlash)),
     BETTER_AUTH_SECRET: required(z.string().min(32, "must be at least 32 characters")),
     OIDC_ISSUER: required(httpUrl.transform(withoutTrailingSlash)),
     OIDC_CLIENT_ID: requiredString(),
@@ -94,7 +95,7 @@ const authSchema = z
 /**
  * Where people, teams, and access come from:
  *
- * - `manual`: admins invite people and manage teams in Logbuch. While there
+ * - `manual`: admins invite people and manage teams in Logbook. While there
  *   is no admin, the first login with an address in INITIAL_ADMIN_EMAILS
  *   becomes one; without that list nobody could ever get in.
  * - `keycloak`: a sync reads the members of Keycloak groups through the
@@ -130,7 +131,7 @@ const directorySchema = z.discriminatedUnion("DIRECTORY", [
 const notificationSchema = z
   .object({
     NOTIFICATION_TRANSPORT: z.enum(["live", "console"]),
-    LOGBUCH_BASE_URL: required(httpUrl.transform(withoutTrailingSlash)),
+    LOGBOOK_BASE_URL: required(httpUrl.transform(withoutTrailingSlash)),
     SLACK_BOT_TOKEN: optional(z.string().startsWith("xoxb-", "must be a Slack bot token (xoxb-…)")),
     /** The Slack channel for one post per new entry. */
     SLACK_CHANNEL_ID: optional(z.string().regex(/^[CG][A-Z0-9]{6,}$/, "must be a Slack channel ID (C…), not a name")),

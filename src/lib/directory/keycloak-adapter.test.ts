@@ -52,9 +52,9 @@ function fakeKeycloak(options: { groups: Record<string, { id: string; members?: 
 const adapterFor = (keycloak: ReturnType<typeof fakeKeycloak>, extra: Partial<Parameters<typeof createKeycloakDirectoryAdapter>[0]> = {}) =>
   createKeycloakDirectoryAdapter({
     issuer: ISSUER,
-    clientId: "logbuch",
+    clientId: "logbook",
     clientSecret: "s3cr:et",
-    accessGroup: "/logbuch",
+    accessGroup: "/logbook",
     fetch: keycloak.fetch,
     ...extra,
   });
@@ -69,9 +69,9 @@ describe("adminApiBase", () => {
 
 describe("createKeycloakDirectoryAdapter", () => {
   const groups = {
-    "/logbuch": { id: "g-access", members: [user("erika"), user("off", { enabled: false })], children: ["/logbuch/contractors"] },
-    "/logbuch/contractors": { id: "g-contractors", members: [user("carl", { firstName: "", lastName: "" })] },
-    "/logbuch-admins": { id: "g-admins", members: [user("adam")] },
+    "/logbook": { id: "g-access", members: [user("erika"), user("off", { enabled: false })], children: ["/logbook/contractors"] },
+    "/logbook/contractors": { id: "g-contractors", members: [user("carl", { firstName: "", lastName: "" })] },
+    "/logbook-admins": { id: "g-admins", members: [user("adam")] },
     "/teams": { id: "g-teams", children: ["/teams/Operations", "/teams/Engineering"] },
     "/teams/Engineering": { id: "g-eng", members: [user("erika")], children: ["/teams/Engineering/Platform"] },
     "/teams/Engineering/Platform": { id: "g-platform", members: [user("carl")] },
@@ -80,7 +80,7 @@ describe("createKeycloakDirectoryAdapter", () => {
 
   it("reads the access group with its subgroups, the admins, and the teams", async () => {
     const keycloak = fakeKeycloak({ groups });
-    const snapshot = await adapterFor(keycloak, { adminGroup: "/logbuch-admins", teamsGroup: "/teams" }).fetchSnapshot();
+    const snapshot = await adapterFor(keycloak, { adminGroup: "/logbook-admins", teamsGroup: "/teams" }).fetchSnapshot();
 
     expect(snapshot.teams).toEqual([
       { externalId: "g-eng", name: "Engineering", active: true },
@@ -102,21 +102,21 @@ describe("createKeycloakDirectoryAdapter", () => {
     const token = keycloak.calls.find((c) => c.url.endsWith("/token"));
     expect(token?.url).toBe(`${ISSUER}/protocol/openid-connect/token`);
     const basic = Buffer.from(new Headers(token?.init?.headers).get("authorization")!.replace("Basic ", ""), "base64").toString();
-    expect(basic).toBe("logbuch:s3cr%3Aet");
+    expect(basic).toBe("logbook:s3cr%3Aet");
     const lookup = keycloak.calls.find((c) => c.url.includes("/group-by-path/"));
-    expect(lookup?.url).toBe(`${ADMIN}/group-by-path/logbuch`);
+    expect(lookup?.url).toBe(`${ADMIN}/group-by-path/logbook`);
     expect(new Headers(lookup?.init?.headers).get("authorization")).toBe("Bearer token-1");
   });
 
   it("reads every page of a large group", async () => {
     const many = Array.from({ length: 5 }, (_, i) => user(`p${i}`));
-    const keycloak = fakeKeycloak({ groups: { "/logbuch": { id: "g-access", members: many } } });
+    const keycloak = fakeKeycloak({ groups: { "/logbook": { id: "g-access", members: many } } });
     const snapshot = await adapterFor(keycloak, { pageSize: 2 }).fetchSnapshot();
     expect(snapshot.people.map((p) => p.externalId)).toEqual(["p0", "p1", "p2", "p3", "p4"]);
   });
 
   it("names a missing group and a missing permission", async () => {
-    await expect(adapterFor(fakeKeycloak({ groups: {} })).fetchSnapshot()).rejects.toThrow("The Keycloak group /logbuch does not exist.");
+    await expect(adapterFor(fakeKeycloak({ groups: {} })).fetchSnapshot()).rejects.toThrow("The Keycloak group /logbook does not exist.");
     await expect(adapterFor(fakeKeycloak({ groups, status: { "/group-by-path/": 403 } })).fetchSnapshot()).rejects.toThrow(/view-users/);
   });
 

@@ -14,7 +14,7 @@ function MedianCell({ days, decisions }: { days: number | null; decisions: numbe
   );
 }
 
-/** How Logbuch and the decision process are used, by month. */
+/** How Logbook and the decision process are used, by month. */
 export async function MonthlyStatistics({ measures }: { measures: Measures }) {
   const fmt = await getFormatter();
   return (
@@ -25,7 +25,7 @@ export async function MonthlyStatistics({ measures }: { measures: Measures }) {
         </CardTitle>
         <CardDescription>
           Proposals started and finished, how long decisions take, entries logged, and how many people opened
-          Logbuch.
+          Logbook.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -82,7 +82,7 @@ export async function MonthlyStatistics({ measures }: { measures: Measures }) {
         </Table>
         <p className="text-xs text-muted-foreground">
           Months in the server&apos;s time zone. Days to decision: the median number of working days from submission to the
-          decision, for decisions made that month. Active people opened Logbuch at least once
+          decision, for decisions made that month. Active people opened Logbook at least once
           that month; the share is of the {measures.peopleWithAccess} people with access today. Activity is recorded
           from the release that added it on.
         </p>

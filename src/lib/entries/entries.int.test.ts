@@ -339,7 +339,7 @@ describe("timeline", () => {
         title: "Neue Regeln für Entscheidungen",
         teamId: seed.teams.ops.id,
         tagIds: [],
-        summary: "Wir dokumentieren alle Entscheidungen im Logbuch.",
+        summary: "Wir dokumentieren alle Entscheidungen im Entscheidungsprotokoll.",
         body: "",
       }),
       new Date("2026-11-04T08:00:00Z"),

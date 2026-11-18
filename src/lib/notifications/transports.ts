@@ -57,7 +57,7 @@ export interface Transports {
   /** The Slack channel for one post per entry (SLACK_CHANNEL_ID). */
   slackChannelId?: string;
   email?: EmailTransport;
-  /** LOGBUCH_BASE_URL, for links in messages. */
+  /** LOGBOOK_BASE_URL, for links in messages. */
   baseUrl: string;
 }
 
@@ -253,7 +253,7 @@ function createEmailTransport(config: {
 /** The transports for this worker's configuration. A channel without its settings is off. */
 export function createTransports(config: {
   NOTIFICATION_TRANSPORT: "live" | "console";
-  LOGBUCH_BASE_URL: string;
+  LOGBOOK_BASE_URL: string;
   SLACK_BOT_TOKEN?: string;
   SLACK_CHANNEL_ID?: string;
   SMTP_URL?: string;
@@ -263,14 +263,14 @@ export function createTransports(config: {
 }): Transports {
   if (config.NOTIFICATION_TRANSPORT === "console") {
     return {
-      baseUrl: config.LOGBUCH_BASE_URL,
+      baseUrl: config.LOGBOOK_BASE_URL,
       slack: createConsoleSlackTransport(),
       slackChannelId: config.SLACK_CHANNEL_ID ?? "console-channel",
       email: createConsoleEmailTransport(),
     };
   }
   return {
-    baseUrl: config.LOGBUCH_BASE_URL,
+    baseUrl: config.LOGBOOK_BASE_URL,
     slack: config.SLACK_BOT_TOKEN ? createSlackTransport(config.SLACK_BOT_TOKEN) : undefined,
     slackChannelId: config.SLACK_CHANNEL_ID,
     email: createEmailTransport(config),

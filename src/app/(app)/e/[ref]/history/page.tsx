@@ -167,7 +167,7 @@ export default async function EntryHistoryPage({ params }: PageProps<"/e/[ref]/h
             {history.events.map((event) => (
               <TableRow key={event.id}>
                 <TableCell>{fmt.dateTime(event.createdAt)}</TableCell>
-                <TableCell>{event.actorName ?? "Logbuch"}</TableCell>
+                <TableCell>{event.actorName ?? "Logbook"}</TableCell>
                 <TableCell>
                   {ACTION_LABELS[event.action] ?? event.action}
                   {eventDetail(event.action, event.payload)}

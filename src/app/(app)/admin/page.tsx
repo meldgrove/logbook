@@ -75,7 +75,7 @@ export default async function AdminPage() {
           <CardDescription>
             {sync
               ? `People and teams come from Keycloak every 15 minutes. Members of ${sync.accessGroup} have access.`
-              : "People and teams are managed in Logbuch. Admins invite people on the People page."}
+              : "People and teams are managed in Logbook. Admins invite people on the People page."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
@@ -100,7 +100,7 @@ export default async function AdminPage() {
             <Alert variant="destructive">
               <CircleAlert aria-hidden="true" />
               <AlertDescription>
-                The last sync failed: {lastRun.error}. Logbuch keeps the previous access list.
+                The last sync failed: {lastRun.error}. Logbook keeps the previous access list.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -243,7 +243,7 @@ export default async function AdminPage() {
                 People without a Slack account
               </h3>
               <p className="text-sm text-muted-foreground">
-                No Slack user matches their email address, so they get emails instead. Logbuch looks again after a week.
+                No Slack user matches their email address, so they get emails instead. Logbook looks again after a week.
               </p>
               {notifications.withoutSlack.length === 0 ? (
                 <p className="text-sm">Everyone was found in Slack.</p>
@@ -291,7 +291,7 @@ export default async function AdminPage() {
                 <CircleAlert aria-hidden="true" />
                 <AlertDescription>
                   {webhook.failingCount === 1 ? "1 entry" : `${webhook.failingCount} entries`} could not be delivered.
-                  Logbuch keeps trying with growing pauses.
+                  Logbook keeps trying with growing pauses.
                 </AlertDescription>
               </Alert>
               <Table>

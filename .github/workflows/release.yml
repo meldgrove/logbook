@@ -50,8 +50,8 @@ jobs:
       bump: ${{ inputs.bump || 'patch' }}
       candidate: ${{ inputs.candidate || false }}
       dry_run: ${{ inputs.dry_run || false }}
-      image: ghcr.io/meldgrove/logbuch
+      image: ghcr.io/meldgrove/logbook
       upgrade_doc: docs/deployment.md
-      title: Meldgrove Logbuch
+      title: Logbook
       description: A self-hosted log of an organization's decisions, updates, and learnings, with a consent-based decision process.
       license: Apache-2.0

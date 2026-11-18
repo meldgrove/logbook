@@ -15,7 +15,7 @@ export interface ImportOptions {
   teamName: string;
   /** Work email of the admin who runs the import; becomes the author. */
   asEmail: string;
-  /** Work email of the decider when a row's decider has no Logbuch access. */
+  /** Work email of the decider when a row's decider has no Logbook access. */
   fallbackDeciderEmail?: string;
   /** Row ids to leave out. */
   skip: string[];
@@ -95,11 +95,11 @@ export async function runCsvImport(db: Database, csv: string, options: ImportOpt
     .where(and(eq(person.hasAccess, true), isNotNull(person.workEmail)));
   const byEmail = new Map(withAccess.map((p) => [p.email!.toLowerCase(), p]));
   const actor = byEmail.get(options.asEmail.toLowerCase());
-  if (!actor?.isAdmin) throw new ImportError(`${options.asEmail} is not a Logbuch admin with access.`);
+  if (!actor?.isAdmin) throw new ImportError(`${options.asEmail} is not a Logbook admin with access.`);
   let fallbackDecider: Person | undefined;
   if (options.fallbackDeciderEmail) {
     fallbackDecider = byEmail.get(options.fallbackDeciderEmail.toLowerCase());
-    if (!fallbackDecider) throw new ImportError(`${options.fallbackDeciderEmail} has no Logbuch access.`);
+    if (!fallbackDecider) throw new ImportError(`${options.fallbackDeciderEmail} has no Logbook access.`);
   }
   const names = new Map(withAccess.map((p) => [p.id, p.name]));
   const skip = new Set(options.skip.map((id) => id.trim()));
@@ -116,7 +116,7 @@ export async function runCsvImport(db: Database, csv: string, options: ImportOpt
   const imported = await importedEntries();
 
   const seen = new Set<string>();
-  /** Rows above that are in Logbuch, or will be: the rows a row may relate to. */
+  /** Rows above that are in Logbook, or will be: the rows a row may relate to. */
   const relatable = new Set(imported.keys());
   const planned: Planned[] = records.map((row, index): Planned => {
     const id = row.id ?? "";

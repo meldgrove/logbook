@@ -72,7 +72,7 @@ const oneWay = (overrides: Partial<ProposalSnapshot> = {}) =>
 const plan = (s: ProposalSnapshot, event: ProposalEvent, actor = PROPOSER) =>
   planProposalEvent({ entry: ENTRY, s, actor: { personId: actor, name: "Pia Proposer" }, post: POST }, event);
 
-/** Direct recipients; posts to the Logbuch channel are checked separately. */
+/** Direct recipients; posts to the Logbook channel are checked separately. */
 const recipients = (planned: PlannedDelivery[]) => planned.filter((p) => p.channel !== "slack_channel").map((p) => p.recipientId);
 const channelPosts = (planned: PlannedDelivery[]) => planned.filter((p) => p.channel === "slack_channel");
 const byRecipient = (planned: PlannedDelivery[]) => new Map(planned.map((p) => [p.recipientId, p]));
@@ -220,7 +220,7 @@ describe("event notifications", () => {
       [PROPOSER, `proposal.lost_access:e2:${BEN}:${since.toISOString()}:${PROPOSER}`],
     ]);
     expect(planned[0]!.message.text).toBe(
-      "Ana no longer has access to Logbuch and is the decider and a feedback giver on this proposal. Replace them so the decision can go ahead.",
+      "Ana no longer has access to Logbook and is the decider and a feedback giver on this proposal. Replace them so the decision can go ahead.",
     );
   });
 
@@ -326,7 +326,7 @@ describe("review-date reminders", () => {
   });
 });
 
-describe("the Logbuch Slack channel", () => {
+describe("the Logbook Slack channel", () => {
   it("announces a submitted proposal once, with its feedback deadline", () => {
     const [post, ...rest] = channelPosts(plan(oneWay(), { type: "submitted" }));
     expect(rest).toEqual([]);

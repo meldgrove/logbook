@@ -26,7 +26,7 @@ let ada: Actor;
 let dan: Actor;
 let amy: Actor;
 
-const BASE = "https://logbuch.example";
+const BASE = "https://logbook.example";
 const WEDNESDAY = new Date("2026-11-04T09:00:00Z");
 const later = (minutes: number) => new Date(WEDNESDAY.getTime() + minutes * 60_000);
 
@@ -99,7 +99,7 @@ describe("webhook", () => {
 
     const receiver = fakeReceiver();
     expect(await syncRequested(db, receiver.client, BASE, later(1))).toMatchObject({ sent: 1 });
-    expect(receiver.sent[0]).toMatchObject({ event: "entry.changed", entry: { type: "update", id: update!.id, url: expect.stringMatching(/^https:\/\/logbuch\.example\/e\/LB-\d+$/) } });
+    expect(receiver.sent[0]).toMatchObject({ event: "entry.changed", entry: { type: "update", id: update!.id, url: expect.stringMatching(/^https:\/\/logbook\.example\/e\/LB-\d+$/) } });
     expect(await state(update!.id)).toMatchObject({ requestedAt: null, deliveredAt: later(1), lastError: null });
 
     // Requested again without a change: nothing is sent.

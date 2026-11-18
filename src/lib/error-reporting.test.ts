@@ -32,12 +32,12 @@ describe("sentryOptions", () => {
   });
 
   it("names the release after APP_VERSION unless SENTRY_RELEASE is set", () => {
-    expect(sentryOptions({ SENTRY_DSN: dsn, APP_VERSION: "1.2.3" }, "web")?.release).toBe("logbuch@1.2.3");
+    expect(sentryOptions({ SENTRY_DSN: dsn, APP_VERSION: "1.2.3" }, "web")?.release).toBe("logbook@1.2.3");
     expect(sentryOptions({ SENTRY_DSN: dsn, APP_VERSION: "1.2.3", SENTRY_RELEASE: "abc123" }, "web")?.release).toBe("abc123");
     expect(sentryOptions({ SENTRY_DSN: dsn }, "web")?.release).toBeUndefined();
     // Compose passes an unset SENTRY_RELEASE as "".
     const config = parseErrorReportingConfig({ SENTRY_DSN: dsn, SENTRY_RELEASE: "", APP_VERSION: "1.2.3" });
-    expect(sentryOptions(config, "web")?.release).toBe("logbuch@1.2.3");
+    expect(sentryOptions(config, "web")?.release).toBe("logbook@1.2.3");
   });
 
   it("removes query values from database errors before sending", () => {

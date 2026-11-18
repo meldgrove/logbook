@@ -1,33 +1,33 @@
 # Identity and access
 
-Logbuch has no passwords of its own. People sign in with an OpenID Connect
+Logbook has no passwords of its own. People sign in with an OpenID Connect
 (OIDC) provider, and a **directory** decides who has access, who is an admin,
 and which team each person belongs to.
 
 - **Manual directory** (`DIRECTORY=manual`, the default): admins invite people
-  by email and manage teams in Logbuch. Works with any OIDC provider.
+  by email and manage teams in Logbook. Works with any OIDC provider.
 - **Keycloak directory** (`DIRECTORY=keycloak`): people, admins, and teams
   come from Keycloak groups and are synced every 15 minutes.
 
-Whichever directory you use, Logbuch never deletes people. Someone who leaves
+Whichever directory you use, Logbook never deletes people. Someone who leaves
 loses access, and their name stays on past entries.
 
 ## OpenID Connect login
 
-Register Logbuch as a confidential client (authorization code flow with PKCE)
+Register Logbook as a confidential client (authorization code flow with PKCE)
 at your provider:
 
 | Setting | Value |
 |---|---|
-| Redirect URI | `<LOGBUCH_BASE_URL>/api/auth/callback/oidc` |
-| Post-logout redirect URI | `<LOGBUCH_BASE_URL>/` |
+| Redirect URI | `<LOGBOOK_BASE_URL>/api/auth/callback/oidc` |
+| Post-logout redirect URI | `<LOGBOOK_BASE_URL>/` |
 | Scopes | `openid profile email` |
 | Client authentication | Client secret |
 
-Then set `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET`. Logbuch
+Then set `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET`. Logbook
 reads the provider's endpoints from
 `<OIDC_ISSUER>/.well-known/openid-configuration`. If the provider publishes an
-`end_session_endpoint`, signing out of Logbuch also signs out of the provider.
+`end_session_endpoint`, signing out of Logbook also signs out of the provider.
 
 Typical issuer URLs:
 
@@ -55,7 +55,7 @@ then go to whoever enters that address first.
 ## Manual directory
 
 1. Set `INITIAL_ADMIN_EMAILS` (required) to your own email address and sign
-   in. While Logbuch has no admin, the first login whose verified email is in
+   in. While Logbook has no admin, the first login whose verified email is in
    that list becomes an admin.
 2. Under **Admin → Teams**, create the teams that own entries. Until there is
    one, nobody can create entries, and the new-entry page says so.
@@ -71,7 +71,7 @@ Anyone else who signs in at the provider sees "No access".
 
 ## Keycloak directory
 
-Logbuch reads the members of three Keycloak groups through the Keycloak Admin
+Logbook reads the members of three Keycloak groups through the Keycloak Admin
 API. All three are required:
 
 - Members of `KEYCLOAK_ACCESS_GROUP`, and of its subgroups, have access.
@@ -91,8 +91,8 @@ API. All three are required:
 For example:
 
 ```text
-/logbuch            ← KEYCLOAK_ACCESS_GROUP=/logbuch
-/logbuch-admins     ← KEYCLOAK_ADMIN_GROUP=/logbuch-admins
+/logbook            ← KEYCLOAK_ACCESS_GROUP=/logbook
+/logbook-admins     ← KEYCLOAK_ADMIN_GROUP=/logbook-admins
 /teams              ← KEYCLOAK_TEAMS_GROUP=/teams
   /Engineering
   /Operations
@@ -107,13 +107,13 @@ team. Someone who signs in before the next sync triggers a sync of their own
 
 ### Keycloak setup
 
-1. Create a client, e.g. `logbuch`:
+1. Create a client, e.g. `logbook`:
    - Client authentication: on
    - Authentication flow: standard flow, with PKCE method S256
    - Service accounts: on (for the sync)
-   - Valid redirect URIs: `<LOGBUCH_BASE_URL>/api/auth/callback/oidc`
-   - Valid post-logout redirect URIs: `<LOGBUCH_BASE_URL>/`
-   - Web origins: `<LOGBUCH_BASE_URL>`
+   - Valid redirect URIs: `<LOGBOOK_BASE_URL>/api/auth/callback/oidc`
+   - Valid post-logout redirect URIs: `<LOGBOOK_BASE_URL>/`
+   - Web origins: `<LOGBOOK_BASE_URL>`
 2. Under the client's **Service account roles**, assign the role
    `view-users` of the client `realm-management`. It lets the sync read users
    and group members, nothing else.
@@ -122,11 +122,11 @@ team. Someone who signs in before the next sync triggers a sync of their own
 
    ```sh
    OIDC_ISSUER=https://auth.example.org/realms/acme
-   OIDC_CLIENT_ID=logbuch
+   OIDC_CLIENT_ID=logbook
    OIDC_CLIENT_SECRET=…
    DIRECTORY=keycloak
-   KEYCLOAK_ACCESS_GROUP=/logbuch
-   KEYCLOAK_ADMIN_GROUP=/logbuch-admins
+   KEYCLOAK_ACCESS_GROUP=/logbook
+   KEYCLOAK_ADMIN_GROUP=/logbook-admins
    KEYCLOAK_TEAMS_GROUP=/teams
    ```
 
@@ -134,7 +134,7 @@ To keep login and sync apart, create a second client with only service
 accounts on, give it the `view-users` role, and set `KEYCLOAK_CLIENT_ID` and
 `KEYCLOAK_CLIENT_SECRET` to it.
 
-[`dev/keycloak/logbuch-realm.json`](../dev/keycloak/logbuch-realm.json) is a
+[`dev/keycloak/logbook-realm.json`](../dev/keycloak/logbook-realm.json) is a
 complete example realm, used by the development setup (`compose.dev.yaml`)
 and the end-to-end tests.
 
@@ -143,11 +143,11 @@ and the end-to-end tests.
 People invited in the manual directory lose access at the first Keycloak
 sync unless they are members of the access group: the sync creates its own
 people, keyed by their Keycloak user ID. Their earlier entries stay under
-their old person record. Teams created in Logbuch become inactive at the same
+their old person record. Teams created in Logbook become inactive at the same
 sync: they stay on old entries, but new entries use the teams from Keycloak.
 
 Switching back from Keycloak to the manual directory keeps everyone's access
 as it was at the last sync. From then on, admins manage all people and teams
-in Logbuch, including those that came from Keycloak. If you switch to
+in Logbook, including those that came from Keycloak. If you switch to
 Keycloak again later, the sync finds the same people and teams by their
-Keycloak IDs and overwrites the changes made in Logbuch.
+Keycloak IDs and overwrites the changes made in Logbook.

@@ -35,7 +35,7 @@ const base64url = (value: string | Buffer) => Buffer.from(value).toString("base6
  * browser: it approves the authorization URL Better Auth built and passes the
  * code to the callback.
  */
-export async function startFakeOidcProvider(clientId = "logbuch-test"): Promise<FakeOidcProvider> {
+export async function startFakeOidcProvider(clientId = "logbook-test"): Promise<FakeOidcProvider> {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const kid = "test-key";
   const approved = new Map<string, { identity: OidcIdentity; nonce: string }>();

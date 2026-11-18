@@ -52,7 +52,7 @@ export async function getFormOptions(db: Database) {
   };
 }
 
-/** Everyone who ever appeared in Logbuch, for the timeline's person filter. */
+/** Everyone who ever appeared in Logbook, for the timeline's person filter. */
 export async function getFilterOptions(db: Database) {
   const [teams, tags, people] = await Promise.all([
     db.select({ id: team.id, label: team.name }).from(team).orderBy(asc(team.name)),

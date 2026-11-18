@@ -38,7 +38,7 @@ export async function getDirectoryStatus(db: Database, now: Date = new Date()) {
   };
 }
 
-/** Everyone Logbuch knows, for the People page: with access first, then by name. */
+/** Everyone Logbook knows, for the People page: with access first, then by name. */
 export async function listPeople(db: Database) {
   return db
     .select({
