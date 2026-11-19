@@ -293,13 +293,17 @@ healthy, it restores `.env` and starts the version before.
 The script installs images, not files: when a release changes
 `compose.yaml`, its release notes say so, and `git pull` takes the new file.
 
-Installations set up before the update button get it, and the channels, with
-the newest `compose.yaml` and the host setup again:
+Installations set up before the update button (with Meldgrove Updater 0.1)
+get it, and the channels, with the newest `compose.yaml`, the release that
+brings the update button, and the host setup again. First set
+`LOGBOOK_VERSION` in `.env` to the release that brings the update button or a
+newer one: with the version it pins, `docker compose up -d` would only update
+the `updater` and keep Logbook's old image. Then:
 
 ```sh
 cd /srv/logbook
 git pull
-docker compose up -d
+docker compose up -d --pull always
 docker compose run --rm -T --pull always updater host-setup > updater-setup.sh && sudo sh updater-setup.sh
 ```
 

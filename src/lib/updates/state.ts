@@ -1,4 +1,4 @@
-import type { Update, UpdaterStatus, UpdatesResponse } from "./types";
+import type { Update, UpdaterStatus, UpdatesRequestResult, UpdatesResponse } from "./types";
 
 /*
  * What the update button and the Updates card show, as pure functions of the
@@ -17,27 +17,34 @@ export type ButtonState =
   | "off"
   | "unreachable";
 
-/** An installation this browser asked for and waits for, kept in sessionStorage across reloads. */
+/**
+ * An installation this browser follows, kept in sessionStorage across
+ * reloads: one it asked for (remembered before the request), or one the
+ * updater reports.
+ */
 export interface PendingInstall {
   version: string;
-  /** `app.version` when it was asked for. */
-  fromVersion: string | null;
-  /** `finishedAt` of the updater's last result before, so an older result for the same version does not count. */
-  previousResult: string | null;
-  /** When it was asked for (ms since the epoch). */
+  /** When it was asked for, or when the updater started it (ms since the epoch). Results finished before do not count. */
   startedAt: number;
-  /** Logbook did not answer at least once since: it restarted. */
+  /** The updater accepted it (202) or reports it. False while the answer to the request was unclear. */
+  confirmed: boolean;
+  /** Logbook or the updater did not answer at least once since: it restarted. */
   sawOutage: boolean;
+  /** Why the request got no clear answer; shown when the installation did not start. */
+  reason: string | null;
 }
 
-/** After this long without a result, the button says so. */
+/** After this long without a result, the button says so and offers to stop waiting. */
 export const INSTALL_PATIENCE_MS = 15 * 60_000;
+
+/** How long an installation without a clear answer to its request may take to show up in the status. */
+export const RECONCILE_MS = 60_000;
 
 export const CHANNEL_LABELS = { stable: "Stable", preview: "Preview" } as const;
 
 export function buttonState(
   response: UpdatesResponse | null,
-  local: { checking: boolean; pending: PendingInstall | null },
+  local: { checking: boolean; pending: PendingInstall | null; followed?: PendingInstall | null },
 ): ButtonState {
   if (local.pending) return "installing";
   if (!response) return local.checking ? "checking" : "loading";
@@ -45,7 +52,7 @@ export function buttonState(
   if (!response.reachable || !status) return local.checking ? "checking" : "unreachable";
   if (status.installing) return "installing";
   if (local.checking || status.checking) return "checking";
-  if (failure(status)) return "failed";
+  if (failure(status, local.followed)) return "failed";
   // Also with automatic updates off: the updater still offers new versions.
   if (status.available) return "available";
   if (status.attention) return "attention";
@@ -63,13 +70,46 @@ export function hasPopover(state: ButtonState): boolean {
   return state === "available" || state === "attention" || state === "installing" || state === "failed";
 }
 
-/** The failed installation the button shows: the last one failed and the version is still offered. */
-export function failure(status: UpdaterStatus): { version: string; message: string } | null {
+/** The offer of `version`: `available` or `attention`. */
+function offer(status: UpdaterStatus, version: string): Update | null {
+  if (status.available?.version === version) return status.available;
+  if (status.attention?.version === version) return status.attention;
+  return null;
+}
+
+/** `last` when it is a result of `pending`: its version, finished at or after it started. */
+function resultOf(pending: PendingInstall, status: UpdaterStatus | null): UpdaterStatus["last"] {
+  const last = status?.last;
+  return last && last.version === pending.version && Date.parse(last.finishedAt) >= pending.startedAt ? last : null;
+}
+
+/**
+ * The failed installation the button shows: the last one failed or went
+ * back, and the updater still offers the version with that failure, or this
+ * browser followed the installation (`followed`). `update` is the offer to
+ * try again, while the version is still offered.
+ */
+export function failure(
+  status: UpdaterStatus,
+  followed: PendingInstall | null = null,
+): { version: string; message: string; update: Update | null } | null {
   const last = status.last;
   if (!last || (last.result !== "failed" && last.result !== "rolled-back")) return null;
-  const offered = status.available?.failed ? status.available : status.attention?.failed ? status.attention : null;
-  if (!offered) return null;
-  return { version: last.version, message: last.message ?? offered.failed! };
+  const update = offer(status, last.version);
+  if (!update?.failed && !(followed && resultOf(followed, status) === last)) return null;
+  return { version: last.version, message: last.message ?? update?.failed ?? "The installation failed.", update };
+}
+
+/**
+ * What the popover offers for an update: "install" (Install now), "anyway"
+ * (an attention offer: Install anyway…), "locked" (an attention offer that the
+ * image tag set where Logbook is deployed does not reach), or "off" (the
+ * updater installs nothing).
+ */
+export function installAction(status: UpdaterStatus, update: Update): "install" | "anyway" | "locked" | "off" {
+  if (!canInstall(status)) return "off";
+  if (update.version !== status.attention?.version) return "install";
+  return status.channelLocked === null ? "anyway" : "locked";
 }
 
 /** The version shown as installed: the updater's, or Logbook's own. */
@@ -78,7 +118,12 @@ export function installedVersion(response: UpdatesResponse): string | null {
 }
 
 /** The tooltip, also the button's accessible name. */
-export function buttonLabel(state: ButtonState, response: UpdatesResponse | null, pending: PendingInstall | null): string {
+export function buttonLabel(
+  state: ButtonState,
+  response: UpdatesResponse | null,
+  pending: PendingInstall | null,
+  followed: PendingInstall | null = null,
+): string {
   const status = response?.updater;
   switch (state) {
     case "loading":
@@ -96,7 +141,7 @@ export function buttonLabel(state: ButtonState, response: UpdatesResponse | null
     case "installing":
       return `Installing ${pending?.version ?? status?.installing?.version ?? ""}…`;
     case "failed":
-      return `Update to ${failure(status!)!.version} failed`;
+      return `Update to ${failure(status!, followed)!.version} failed`;
     case "off":
       return "Automatic updates are off on this server";
     case "unreachable":
@@ -107,24 +152,119 @@ export function buttonLabel(state: ButtonState, response: UpdatesResponse | null
 export type InstallOutcome = "waiting" | "done" | "failed";
 
 /**
- * Whether an installation this browser asked for has ended. Done when
- * Logbook runs the version, or the updater says it installed it (host: the
- * new version is healthy). A platform only accepted it, so then Logbook must
- * run another version or have restarted. Failed when the updater says so.
+ * Whether a confirmed installation has ended, from an answer with the
+ * updater's status that arrived after it started. In this order: a result
+ * that failed or went back; still installing (also when Logbook already
+ * answers with the new version: on a server the result comes only after
+ * every service is healthy, and it may still go back); installed; accepted
+ * by a platform, once Logbook runs the version (without a version of its
+ * own: once it answered after an outage); and, when nothing reports the
+ * installation any more, Logbook runs the version.
  */
 export function installOutcome(pending: PendingInstall, response: UpdatesResponse): InstallOutcome {
-  if (response.app.version === pending.version) return "done";
-  const last = response.updater?.last;
-  if (!last || last.version !== pending.version || last.finishedAt === pending.previousResult) return "waiting";
-  switch (last.result) {
-    case "failed":
-    case "rolled-back":
-      return "failed";
-    case "installed":
-      return "done";
-    case "accepted":
-      return response.app.version !== pending.fromVersion || pending.sawOutage ? "done" : "waiting";
+  const status = response.updater;
+  const last = resultOf(pending, status);
+  if (last?.result === "failed" || last?.result === "rolled-back") return "failed";
+  if (status?.installing?.version === pending.version) return "waiting";
+  if (last?.result === "installed") return "done";
+  const app = response.app.version;
+  if (last?.result === "accepted") return app === pending.version || (app === null && pending.sawOutage) ? "done" : "waiting";
+  return app === pending.version ? "done" : "waiting";
+}
+
+/** The installation the updater reports in `status`, to follow unless it is `ignored` (see `installKey`). */
+export function adoptInstall(
+  pending: PendingInstall | null,
+  status: UpdaterStatus | null,
+  now: number,
+  ignored: string | null = null,
+): PendingInstall | null {
+  const installing = status?.installing;
+  if (!installing) return pending;
+  if (pending?.version === installing.version) return pending.confirmed ? pending : { ...pending, confirmed: true };
+  if (installKey(installing) === ignored) return pending;
+  const startedAt = Date.parse(installing.startedAt);
+  return {
+    version: installing.version,
+    startedAt: Number.isNaN(startedAt) ? now : startedAt,
+    confirmed: true,
+    sawOutage: false,
+    reason: null,
+  };
+}
+
+/** Names one installation the updater reports, so that the button can stop following it. */
+export function installKey(installing: NonNullable<UpdaterStatus["installing"]>): string {
+  return `${installing.version}@${installing.startedAt}`;
+}
+
+/**
+ * What follows from the answer to the install request of `attempt`: 202
+ * confirms it; a refusal forgets it, unless the status it carries reports
+ * another installation (another admin or an automatic one was faster),
+ * which is followed instead; any other answer is unclear, and the attempt
+ * waits for the status to report it (`followInstall`). An attempt that a
+ * status reported in the meantime stays.
+ */
+export function afterInstallRequest(
+  attempt: PendingInstall,
+  result: UpdatesRequestResult,
+  now: number,
+): { pending: PendingInstall | null; error: string | null } {
+  if (result.kind === "answer" && result.httpStatus === 202) return { pending: { ...attempt, confirmed: true }, error: null };
+  if (attempt.confirmed) return { pending: attempt, error: null };
+  switch (result.kind) {
+    case "answer": {
+      const { httpStatus, body } = result;
+      if (httpStatus >= 400) {
+        const other = adoptInstall(null, body.updater, now);
+        return other ? { pending: other, error: null } : { pending: null, error: body.error ?? "The update service did not start the installation." };
+      }
+      // 200: no updater answered in time, or an answer without the installation.
+      return { pending: { ...attempt, reason: body.error ?? attempt.reason }, error: null };
+    }
+    case "outage":
+      return { pending: { ...attempt, reason: "Logbook could not be reached." }, error: null };
+    case "signed-out":
+    case "error":
+      return { pending: null, error: result.message };
   }
+}
+
+export type FollowStep =
+  /** Keep polling, with this attempt (now perhaps confirmed or after an outage). `offline`: no status this time. */
+  | { kind: "wait"; pending: PendingInstall; offline: boolean }
+  | { kind: "done" }
+  | { kind: "failed" }
+  /** The request got no clear answer, and the status did not report the installation within a minute. */
+  | { kind: "not-started"; reason: string }
+  /** The admin session ended: stop polling, and keep the attempt for a later page load. */
+  | { kind: "signed-out" };
+
+/**
+ * One poll while following `pending`. No answer, 5xx, and no updater are
+ * expected while Logbook restarts. An unconfirmed attempt counts once the
+ * status reports it (installing, or a result after it started); after a
+ * minute without, it did not start.
+ */
+export function followInstall(pending: PendingInstall, result: UpdatesRequestResult, now: number): FollowStep {
+  if (result.kind === "signed-out") return { kind: "signed-out" };
+  if (result.kind === "error") return { kind: "wait", pending, offline: false };
+  const outage: FollowStep = { kind: "wait", pending: { ...pending, sawOutage: true }, offline: true };
+  if (result.kind === "outage") return outage;
+  const response = result.body;
+  const status = response.reachable ? response.updater : null;
+  if (!pending.confirmed) {
+    const reported = status?.installing?.version === pending.version || resultOf(pending, status) !== null;
+    if (reported) pending = { ...pending, confirmed: true };
+    else if (now - pending.startedAt >= RECONCILE_MS) {
+      const reason = (!status && response.error) || pending.reason || "The update service does not report it.";
+      return { kind: "not-started", reason };
+    } else return status ? { kind: "wait", pending, offline: false } : outage;
+  }
+  if (!status) return outage;
+  const outcome = installOutcome(pending, response);
+  return outcome === "waiting" ? { kind: "wait", pending, offline: false } : { kind: outcome };
 }
 
 /** What the server is doing during an installation. */

@@ -54,7 +54,7 @@ test("a member of the Keycloak admin group sees the admin area", async ({ page }
   // Without WEBHOOK_URL, the worker sends nothing.
   await expect(page.getByRole("heading", { name: "Webhook" })).toBeVisible();
   await expect(page.locator("dt", { hasText: /^Webhook$/ }).locator("..")).toContainText("Off");
-  // Without an update service (UPDATER_URL is empty here), the update button and the Updates card say so.
+  // Without an update service (no `updater` answers here), the update button and the Updates card say so.
   await expect(page.getByRole("button", { name: "No update service. See the deployment guide." })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Updates", exact: true })).toBeVisible();
   await expect(page.getByText("The update service is not reachable.")).toBeVisible();

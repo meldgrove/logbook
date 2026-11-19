@@ -172,7 +172,7 @@ export const DEFAULT_UPDATER_URL = "http://updater:8080";
  * The Meldgrove Updater's API, for the update button and the Updates card
  * (docs/deployment.md, Automatic updates). Unset means the `updater` service
  * of compose.yaml. Unlike other variables, an empty value is not unset: it
- * switches the update button off.
+ * switches the update button off (compose.yaml passes the default instead).
  */
 const updaterSchema = z.object({
   UPDATER_URL: z.preprocess(

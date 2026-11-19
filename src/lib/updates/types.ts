@@ -85,3 +85,13 @@ export const installableVersion = z
 
 export const installRequestSchema = z.object({ version: installableVersion });
 export const channelRequestSchema = z.object({ channel: z.enum(["stable", "preview"]) });
+
+/** How a browser request to a route under /api/admin/updates ended. */
+export type UpdatesRequestResult =
+  | { kind: "answer"; httpStatus: number; body: UpdatesResponse }
+  /** No answer, or 5xx: Logbook restarts (or the network is down). */
+  | { kind: "outage" }
+  /** 401, 403, 404, or a redirect: the admin session ended (or a POST came from elsewhere). */
+  | { kind: "signed-out"; message: string }
+  /** Another answer without a status, such as 400. */
+  | { kind: "error"; message: string };

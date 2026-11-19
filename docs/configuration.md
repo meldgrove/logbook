@@ -107,7 +107,7 @@ strings, or values from database queries. The browser sends nothing.
 
 | Variable | Default | Value |
 |---|---|---|
-| `UPDATER_URL` | `http://updater:8080` | Address of the `updater` service's API, which the update button and the Updates card on the admin page ask. Empty switches both off; `compose.yaml` passes the default for an empty value |
+| `UPDATER_URL` | `http://updater:8080` | Address of the `updater` service's API, which the update button and the Updates card on the admin page ask. Under `compose.yaml`, an empty value also means the default; empty switches both off only where Logbook reads its environment directly, without Compose |
 
 The `updater` service itself takes `UPDATE_COOLDOWN`, `UPDATE_WINDOW`,
 `UPDATE_DEPLOY_HOOK_URL`, and `UPDATE_DEPLOY_HOOK_TOKEN` (see

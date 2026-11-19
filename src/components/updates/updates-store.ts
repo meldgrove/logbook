@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
-import type { PendingInstall } from "@/lib/updates/state";
-import type { UpdatesResponse } from "@/lib/updates/types";
+import { adoptInstall, installKey, type PendingInstall } from "@/lib/updates/state";
+import type { UpdatesRequestResult, UpdatesResponse } from "@/lib/updates/types";
+
+export type { UpdatesRequestResult };
 
 /*
  * The latest answer of /api/admin/updates, shared by the update button and
@@ -16,18 +18,24 @@ export interface UpdatesSnapshot {
   offline: boolean;
   /** When the latest request ended (ms since the epoch); relative times count from here. */
   at: number;
+  /** The installation this browser followed until it failed: the button shows its result. */
+  followed: PendingInstall | null;
 }
 
 const PENDING_KEY = "logbook.updates.installing";
-const SERVER_SNAPSHOT: UpdatesSnapshot = { response: null, pending: null, offline: false, at: 0 };
+const SERVER_SNAPSHOT: UpdatesSnapshot = { response: null, pending: null, offline: false, at: 0, followed: null };
 
 let snapshot: UpdatesSnapshot | null = null;
+/** The installation the admin stopped waiting for (`installKey`): a status that reports it does not bring it back. */
+let stopped: string | null = null;
 const listeners = new Set<() => void>();
 
 function readPending(): PendingInstall | null {
   try {
     const value = JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? "null") as PendingInstall | null;
-    return value && typeof value.version === "string" && typeof value.startedAt === "number" ? value : null;
+    return value && typeof value.version === "string" && typeof value.startedAt === "number" && typeof value.confirmed === "boolean"
+      ? value
+      : null;
   } catch {
     return null;
   }
@@ -43,7 +51,7 @@ function writePending(pending: PendingInstall | null): void {
 }
 
 function getSnapshot(): UpdatesSnapshot {
-  snapshot ??= { response: null, pending: readPending(), offline: false, at: Date.now() };
+  snapshot ??= { response: null, pending: readPending(), offline: false, at: Date.now(), followed: null };
   return snapshot;
 }
 
@@ -62,16 +70,27 @@ export function setUpdates(change: Partial<UpdatesSnapshot>): void {
   for (const listener of listeners) listener();
 }
 
+/**
+ * Shows an answer with the updater's status (from a poll, a check, a refused
+ * request, or the channel), and follows an installation it reports.
+ */
+export function receiveUpdates(response: UpdatesResponse, change: Partial<UpdatesSnapshot> = {}): void {
+  const pending = "pending" in change ? (change.pending ?? null) : getSnapshot().pending;
+  const adopted = adoptInstall(pending, response.reachable ? response.updater : null, Date.now(), stopped);
+  setUpdates({ ...change, response, ...(adopted !== pending ? { pending: adopted, followed: null } : {}) });
+}
+
+/** Forgets the installation the button waits for; normal polling goes on. */
+export function stopWaiting(): void {
+  const { pending, response } = getSnapshot();
+  const installing = response?.updater?.installing;
+  if (installing && installing.version === pending?.version) stopped = installKey(installing);
+  setUpdates({ pending: null, offline: false });
+}
+
 export function useUpdates(): UpdatesSnapshot {
   return useSyncExternalStore(subscribe, getSnapshot, () => SERVER_SNAPSHOT);
 }
-
-export type UpdatesRequestResult =
-  | { kind: "answer"; httpStatus: number; body: UpdatesResponse }
-  /** No answer, or 502/503/504: Logbook restarts (or the network is down). */
-  | { kind: "outage" }
-  /** Another answer, such as 404 after the session ended. */
-  | { kind: "error"; message: string };
 
 /** Calls one of the routes under /api/admin/updates. */
 export async function requestUpdates(
@@ -89,8 +108,14 @@ export async function requestUpdates(
   } catch {
     return { kind: "outage" };
   }
-  if (response.status === 502 || response.status === 503 || response.status === 504) return { kind: "outage" };
+  if (response.status >= 500) return { kind: "outage" };
   const json = (await response.json().catch(() => null)) as (Partial<UpdatesResponse> & { error?: string }) | null;
-  if (json && typeof json.reachable === "boolean") return { kind: "answer", httpStatus: response.status, body: json as UpdatesResponse };
+  if (!response.redirected && json && typeof json.reachable === "boolean") {
+    return { kind: "answer", httpStatus: response.status, body: json as UpdatesResponse };
+  }
+  if (response.redirected || response.status === 401 || response.status === 404) {
+    return { kind: "signed-out", message: "Your session ended. Sign in again as an admin." };
+  }
+  if (response.status === 403) return { kind: "signed-out", message: json?.error ?? "Logbook refused the request." };
   return { kind: "error", message: json?.error ?? `Logbook answered HTTP ${response.status}.` };
 }

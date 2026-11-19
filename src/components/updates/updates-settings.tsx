@@ -10,7 +10,7 @@ import type { DisplayPreferences } from "@/lib/preferences";
 import { automaticText, CHANNEL_LABELS, PREVIEW_HELP, stableHelp } from "@/lib/updates/state";
 import type { Channel, UpdatesResponse } from "@/lib/updates/types";
 import { cn } from "@/lib/utils";
-import { requestUpdates, setUpdates, useUpdates } from "./updates-store";
+import { receiveUpdates, requestUpdates, useUpdates } from "./updates-store";
 
 const DEPLOYMENT_GUIDE = "https://github.com/meldgrove/logbook/blob/main/docs/deployment.md#automatic-updates";
 
@@ -38,15 +38,17 @@ export function UpdatesSettings({ initial, preferences }: { initial: UpdatesResp
     const result = await requestUpdates("channel", { channel });
     setSaving(false);
     if (result.kind === "answer") {
-      setUpdates({ response: result.body });
+      receiveUpdates(result.body);
       setChoice(null);
+      // Saved only when the updater answers with the chosen channel.
+      const saved = result.body.reachable && result.body.updater?.channel === channel;
       setMessage(
-        result.body.error
-          ? { tone: "error", text: result.body.error }
-          : { tone: "info", text: `Saved: ${CHANNEL_LABELS[channel]}.` },
+        saved
+          ? { tone: "info", text: `Saved: ${CHANNEL_LABELS[channel]}.` }
+          : { tone: "error", text: result.body.error ?? "The update service did not save the channel. Try again." },
       );
     } else {
-      setMessage({ tone: "error", text: result.kind === "error" ? result.message : "Logbook could not be reached. Try again." });
+      setMessage({ tone: "error", text: result.kind === "outage" ? "Logbook could not be reached. Try again." : result.message });
     }
   }
 
