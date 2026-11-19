@@ -36,8 +36,14 @@ export async function signInAction(): Promise<void> {
 export async function signOutAction(): Promise<void> {
   const requestHeaders = await headers();
   const auth = getAuth();
-  const session = await auth.api.getSession({ headers: requestHeaders });
-  if (session) await auth.api.signOut({ headers: requestHeaders });
+  const session = await auth.api.getSession({
+    headers: requestHeaders,
+    query: { disableRefresh: true },
+  }).catch(() => {
+    logger.warn("Could not read the session for provider logout");
+    return null;
+  });
+  await auth.api.signOut({ headers: requestHeaders });
 
   const config = getAuthConfig();
   const endSession = (await getOidcEndpoints(config.OIDC_ISSUER))?.endSessionEndpoint;

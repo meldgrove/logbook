@@ -249,6 +249,27 @@ describe("login with the OIDC provider", () => {
     expect(await personFor(bea.cookie)).toMatchObject({ oidcSubject: "sub-bea" });
   });
 
+  it("ends the local session and reaches provider logout when the session lookup fails", async () => {
+    await addPerson({ oidcSubject: "sub-ada" });
+    const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
+    request.headers = new Headers({ cookie });
+    const lookup = vi.spyOn(auth.api, "getSession").mockRejectedValueOnce(new Error("session lookup failed"));
+
+    try {
+      await expect(signOutAction()).rejects.toThrow("redirect");
+      expect(lookup).toHaveBeenCalledWith({
+        headers: request.headers,
+        query: { disableRefresh: true },
+      });
+      const logoutUrl = new URL(request.redirect.mock.lastCall![0]);
+      expect(logoutUrl.origin).toBe(new URL(provider.issuer).origin);
+      expect(logoutUrl.searchParams.has("id_token_hint")).toBe(false);
+      expect(await db.select().from(authSession)).toHaveLength(0);
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
   it("returns to login after local sign-out when the provider token cannot be read", async () => {
     await addPerson({ oidcSubject: "sub-ada" });
     const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
