@@ -27,17 +27,20 @@ the `pgboss` schema of the same database.
 
 [`compose.yaml`](../compose.yaml) runs `migrate`, `web`, and `worker`
 against the PostgreSQL in `DATABASE_URL`, and the optional `updater`
-([automatic updates](#automatic-updates)). Run it on [Coolify](#coolify) or
-on a [Debian server](#debian) (Debian 12 or later, or a similar system with
-systemd and apt, such as Ubuntu 24.04). Both take `compose.yaml` from the
-branch `stable`, which is at the newest release; `main` has changes that are
-not released yet.
+([automatic updates](#automatic-updates)). It is made for a Linux server:
+Debian 12 or later, or a similar system with systemd and apt, such as Ubuntu
+24.04 ([setup](#setup)). The server takes `compose.yaml` from the branch
+`stable`, which is at the newest release; `main` has changes that are not
+released yet. To run Logbook on Coolify instead, see [Coolify](coolify.md).
 
 `LOGBOOK_VERSION` is required: Compose stops with a message without it.
 
-Put a reverse proxy that terminates TLS in front of `web` (Coolify's own, or
-Caddy on Debian) and use its public URL as `LOGBOOK_BASE_URL`. Use exactly
-that URL: login redirects and links in messages are built from it.
+`web` listens on `127.0.0.1:3000`, on the server only; `LOGBOOK_PORT`
+changes the host port. Put a reverse proxy that terminates TLS in front of it
+(Caddy, see [setup](#setup)) and use its public URL as `LOGBOOK_BASE_URL`.
+Use exactly that URL: login redirects and links in messages are built from
+it. With several apps on one server, give each its own port and its own site
+in the Caddyfile.
 
 Set `TZ` to your organization's time zone (default UTC): deadlines end at
 23:59, and reminders go out at 09:00, in that zone.
@@ -53,8 +56,8 @@ image path will not discover it.
    and `POSTGRES_DB=logbuch` to match the existing volume.
 2. Take the Compose files from the new release and set `LOGBOOK_VERSION` to
    its version or series. Rename `LOGBUCH_BASE_URL` to `LOGBOOK_BASE_URL`.
-   If your platform reads Compose from GitHub, point it to `meldgrove/logbook`
-   and follow `stable`.
+   On Coolify, point the resource to `meldgrove/logbook`, branch `stable`,
+   Docker Compose location `/compose.coolify.yaml` ([Coolify](coolify.md)).
 3. Deploy the new version. The session cookie has a new name, so people will
    sign in again. If you pinned `MAIL_FROM_NAME` to the old name, set it to
    `Logbook` or remove the override to use the new default.
@@ -84,35 +87,7 @@ docker build -t ghcr.io/meldgrove/logbook:local .
 docker compose up -d
 ```
 
-## Coolify
-
-1. **Database:** create a PostgreSQL 18 resource and copy its internal URL.
-   `compose.postgres.yaml` does not work on Coolify: it passes its one
-   Compose file with `-f`, which overrides `COMPOSE_FILE`.
-2. **Application:** create a Docker Compose resource from the public
-   repository `https://github.com/meldgrove/logbook`, branch `stable`,
-   Docker Compose location `/compose.yaml`. Under Advanced, set Auto deploy
-   to "Manual deployments only", so that only releases deploy, and turn on
-   "Connect To Predefined Network", so that Logbook reaches the database.
-   Without it, `migrate` logs `getaddrinfo EAI_AGAIN` and fails after a
-   minute.
-3. **Domain:** assign the domain, such as `https://logbook.example.org`, to
-   `web`, port 3000.
-4. **Register Logbook at your provider** with the redirect URI
-   `<LOGBOOK_BASE_URL>/api/auth/callback/oidc`
-   ([identity and access](identity-and-access.md#openid-connect-login)).
-5. **Environment variables** of the resource
-   ([configuration](configuration.md)): `LOGBOOK_VERSION` (a series such as
-   `0.2`, see [automatic updates](#automatic-updates)), `LOGBOOK_BASE_URL`
-   (the domain), `DATABASE_URL` (the database's internal URL), a new
-   `BETTER_AUTH_SECRET` (`openssl rand -base64 32`), the `OIDC_*` variables,
-   and `DIRECTORY` with its settings.
-6. **Deploy**, open `LOGBOOK_BASE_URL`, sign in, and set up people and teams
-   ([manual directory](identity-and-access.md#manual-directory) or
-   [Keycloak directory](identity-and-access.md#keycloak-directory)).
-7. **Automatic updates:** set them up [on Coolify](#on-coolify).
-
-## Debian
+## Setup
 
 On a server with Debian 12 or later, or a similar system such as Ubuntu,
 run the commands as root (`sudo -i`).
@@ -158,7 +133,9 @@ run the commands as root (`sudo -i`).
 
 5. **Start:** `docker compose up -d --pull always`.
 6. **HTTPS:** point the domain's DNS at the server, install Caddy
-   (`apt install caddy`), and replace `/etc/caddy/Caddyfile` with:
+   (`apt install caddy`), and put this site into `/etc/caddy/Caddyfile`, in
+   place of the package's example site `:80` and next to the sites of other
+   apps:
 
    ```text
    logbook.example.org {
@@ -171,7 +148,7 @@ run the commands as root (`sudo -i`).
 7. Open `LOGBOOK_BASE_URL`, sign in, and set up people and teams
    ([manual directory](identity-and-access.md#manual-directory) or
    [Keycloak directory](identity-and-access.md#keycloak-directory)).
-8. **Automatic updates:** set them up [on Debian](#on-debian).
+8. **Automatic updates:** [set them up](#setup-on-the-server).
 
 ## Health checks
 
@@ -196,23 +173,19 @@ admin page shows the worker's last heartbeat.
 - **Upgrades**: read the release notes of every release since yours and
   take their steps. Back up the database first: migrations only move
   forward. `migrate` applies new migrations before `web` and `worker` start.
-  - **Coolify:** set `LOGBOOK_VERSION` to the new release in the resource's
-    environment variables and redeploy. Coolify reads `compose.yaml` from
-    `stable`, which is at the newest release.
-  - **Debian:** in `/srv/logbook`, run `git pull` (the newest release's
-    `compose.yaml`), then install the release with the
-    [update button](#the-update-button), or set `LOGBOOK_VERSION` in `.env`
-    and run `docker compose up -d --pull always`.
+  In `/srv/logbook`, run `git pull` (the newest release's `compose.yaml`),
+  then install the release with the [update button](#the-update-button), or
+  set `LOGBOOK_VERSION` in `.env` and run
+  `docker compose up -d --pull always`.
 
 ## Automatic updates
 
 `compose.yaml` includes the `updater` service of
 [Meldgrove Updater](https://github.com/meldgrove/updater). Once an hour it
-checks for new versions of Logbook and installs them: on a Debian server
-through the server, which pulls the image and restarts Logbook, `migrate`
-first; on Coolify through its deploy link. Until it is set up
-[on Debian](#on-debian) or [on Coolify](#on-coolify), it installs nothing,
-but admins still see new versions.
+checks for new versions of Logbook and installs them through the server,
+which pulls the image and restarts Logbook, `migrate` first. Until the
+[host setup](#setup-on-the-server) runs, it installs nothing, but admins
+still see new versions.
 
 Admins choose the channel on the admin page, under **Updates**:
 
@@ -243,36 +216,19 @@ for updates; a dot means a new version is available. Its popover lists the
 changes, links to the release notes, says when the version installs
 automatically, and installs it at once with **Install now**. The page
 reloads when Logbook is back with the new version. When an installation
-fails, the button shows why; on a Debian server, a version that does not
-become healthy is replaced by the one before. While automatic updates are
-off (neither set up as below), the button still shows new versions, but
-cannot install them.
+fails, the button shows why; a version that does not become healthy is
+replaced by the one before. While automatic updates are off (before the
+[host setup](#setup-on-the-server)), the button still shows new versions,
+but cannot install them.
 
 The **Updates** card on the admin page shows the installed version, the
 channel, and whether updates install automatically. The button and the card
-ask the updater at `UPDATER_URL` ([configuration](configuration.md#updates));
+ask the updater at `UPDATER_URL` ([configuration](configuration.md#updates-web));
 without one, they say that there is no update service.
 
-### On Coolify
+### Setup on the server
 
-1. Under Settings > Advanced, turn on API Access if it is off.
-2. Under Keys & Tokens > API Tokens, create a token with only the `deploy`
-   permission; clear `read`. Coolify shows it only once.
-3. In Logbook's resource, select Webhooks and copy Deploy Webhook.
-4. In the resource's environment variables, set `UPDATE_DEPLOY_HOOK_URL` to
-   the webhook and `UPDATE_DEPLOY_HOOK_TOKEN` to the token, then redeploy.
-
-On Coolify, the image tag in `LOGBOOK_VERSION` decides what installs, not
-the channel in Logbook: a series such as `0.2` installs the releases of that
-series, `latest` every release (also those with upgrade steps: watch the
-releases on GitHub with Watch → Custom → Releases, and take their steps right
-away), and `preview` every preview and release. When the tag points to a new
-image, the updater calls the deploy link, and Coolify pulls the image and
-restarts Logbook. The `updater` log names the tag it watches.
-
-### On Debian
-
-As root in `/srv/logbook`, with `UPDATE_DEPLOY_HOOK_URL` empty:
+As root in `/srv/logbook`:
 
 ```sh
 docker compose up -d --pull always
