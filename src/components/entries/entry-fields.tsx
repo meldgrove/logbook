@@ -41,6 +41,7 @@ interface ChoiceFieldProps<T extends string> {
   hint?: string;
   error?: string;
   columns?: 1 | 3;
+  disabled?: boolean;
 }
 
 /** A fieldset of radio cards, each with a label and help text. */
@@ -56,6 +57,7 @@ export function ChoiceField<T extends string>({
   hint,
   error,
   columns = 1,
+  disabled,
 }: ChoiceFieldProps<T>) {
   const id = useId();
   const describedBy = [hint ? `${name}-hint` : undefined, error ? `${name}-error` : undefined].filter(Boolean).join(" ") || undefined;
@@ -68,6 +70,7 @@ export function ChoiceField<T extends string>({
       <RadioGroup
         name={name}
         required={enforce}
+        disabled={disabled}
         aria-invalid={error ? true : undefined}
         // Controlled with "" before a choice, so the group never switches modes.
         {...(onChange ? { value: value ?? "", onValueChange: (next: string) => onChange(next as T) } : { defaultValue })}

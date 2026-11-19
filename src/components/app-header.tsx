@@ -13,10 +13,18 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { UpdateButton } from "@/components/updates/update-button";
 import { breadcrumbsFor } from "@/lib/navigation";
+import type { DisplayPreferences } from "@/lib/preferences";
 
-/** The sidebar toggle and where the page sits in the app. */
-export function AppHeader() {
+interface AppHeaderProps {
+  /** Admins see the update button. */
+  isAdmin: boolean;
+  preferences: DisplayPreferences;
+}
+
+/** The sidebar toggle, where the page sits in the app, and, for admins, the update button. */
+export function AppHeader({ isAdmin, preferences }: AppHeaderProps) {
   const crumbs = breadcrumbsFor(usePathname());
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
@@ -24,7 +32,7 @@ export function AppHeader() {
       {crumbs.length > 0 ? (
         <>
           <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-          <Breadcrumb>
+          <Breadcrumb className="min-w-0">
             <BreadcrumbList>
               {crumbs.map((crumb, index) => (
                 <Fragment key={crumb.label}>
@@ -43,6 +51,11 @@ export function AppHeader() {
             </BreadcrumbList>
           </Breadcrumb>
         </>
+      ) : null}
+      {isAdmin ? (
+        <div className="ml-auto flex shrink-0 items-center">
+          <UpdateButton preferences={preferences} />
+        </div>
       ) : null}
     </header>
   );
