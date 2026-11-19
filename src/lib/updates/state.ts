@@ -45,11 +45,17 @@ export function buttonState(
   if (!response.reachable || !status) return local.checking ? "checking" : "unreachable";
   if (status.installing) return "installing";
   if (local.checking || status.checking) return "checking";
-  if (status.mode === "off") return "off";
   if (failure(status)) return "failed";
+  // Also with automatic updates off: the updater still offers new versions.
   if (status.available) return "available";
   if (status.attention) return "attention";
+  if (status.mode === "off") return "off";
   return "up-to-date";
+}
+
+/** Whether the updater can install: with automatic updates off, it refuses. */
+export function canInstall(status: UpdaterStatus): boolean {
+  return status.mode !== "off";
 }
 
 /** States whose click opens the popover; a click on the others checks for updates. */

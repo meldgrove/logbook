@@ -21,6 +21,7 @@ import type { DisplayPreferences } from "@/lib/preferences";
 import {
   buttonLabel,
   buttonState,
+  canInstall,
   CHANNEL_LABELS,
   failure,
   hasPopover,
@@ -366,7 +367,7 @@ function PopoverBody({ state, response, pending, offline, now, formatDateTime, o
           <p className="break-words text-muted-foreground">{failed.message}</p>
           {status.installed ? <p>{status.installed} is still running.</p> : null}
         </div>
-        {update ? (
+        {update && canInstall(status) ? (
           <Button size="sm" className="self-start" onClick={() => onInstall(update, update === status.attention)}>
             Try again
           </Button>
@@ -385,9 +386,13 @@ function PopoverBody({ state, response, pending, offline, now, formatDateTime, o
           </p>
         </div>
         <NotesLink update={update} />
-        <Button size="sm" variant="outline" className="self-start" onClick={() => onInstall(update, true)}>
-          Install anyway…
-        </Button>
+        {canInstall(status) ? (
+          <Button size="sm" variant="outline" className="self-start" onClick={() => onInstall(update, true)}>
+            Install anyway…
+          </Button>
+        ) : (
+          <OffNote />
+        )}
       </div>
     );
   }
@@ -421,14 +426,29 @@ function PopoverBody({ state, response, pending, offline, now, formatDateTime, o
           </div>
         ) : null}
         <NotesLink update={update} />
-        {installs ? <p className="text-muted-foreground">{installs}</p> : null}
-        <Button size="sm" className="self-start" onClick={() => onInstall(update, false)}>
-          Install now
-        </Button>
+        {canInstall(status) ? (
+          <>
+            {installs ? <p className="text-muted-foreground">{installs}</p> : null}
+            <Button size="sm" className="self-start" onClick={() => onInstall(update, false)}>
+              Install now
+            </Button>
+          </>
+        ) : (
+          <OffNote />
+        )}
       </div>
     );
   }
   return null;
+}
+
+/** The updater refuses installations while automatic updates are off. */
+function OffNote() {
+  return (
+    <p className="text-muted-foreground">
+      Automatic updates are off on this server, so nothing can install. Set them up as the deployment guide describes.
+    </p>
+  );
 }
 
 function NotesLink({ update }: { update: Update }) {

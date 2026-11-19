@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 /*
- * The Meldgrove Updater's API (docs/updates.md in meldgrove/meldgrove-master
- * is the contract) and the answer of Logbook's own routes under
- * /api/admin/updates. Client components import only the types.
+ * The Meldgrove Updater's API (contract:
+ * https://github.com/meldgrove/updater#the-apps-update-button) and the answer
+ * of Logbook's own routes under /api/admin/updates. Client components import
+ * only the types.
  */
 
 const isoDate = z.string();

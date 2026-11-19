@@ -244,7 +244,9 @@ changes, links to the release notes, says when the version installs
 automatically, and installs it at once with **Install now**. The page
 reloads when Logbook is back with the new version. When an installation
 fails, the button shows why; on a Debian server, a version that does not
-become healthy is replaced by the one before.
+become healthy is replaced by the one before. While automatic updates are
+off (neither set up as below), the button still shows new versions, but
+cannot install them.
 
 The **Updates** card on the admin page shows the installed version, the
 channel, and whether updates install automatically. The button and the card

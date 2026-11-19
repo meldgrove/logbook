@@ -78,7 +78,10 @@ describe("buttonState", () => {
     ["installing", answer({ installing: { version: "0.2.1", startedAt: "2026-11-19T09:00:00Z", manual: true, stage: "pulling" } }), idle],
     ["installing", answer({ available: update }), { checking: false, pending }],
     ["installing", null, { checking: false, pending }],
-    ["off", answer({ mode: "off", automatic: false, available: update }), idle],
+    ["off", answer({ mode: "off", automatic: false }), idle],
+    // Off installs nothing, but still offers new versions.
+    ["available", answer({ mode: "off", automatic: false, available: update }), idle],
+    ["attention", answer({ mode: "off", automatic: false, attention: { ...update, version: "0.3.0" } }), idle],
     ["failed", answer({ available: { ...update, failed: "unhealthy" }, last: rolledBack }), idle],
     ["failed", answer({ attention: { ...update, failed: "unhealthy" }, last: { ...rolledBack, result: "failed" } }), idle],
     // An earlier failure of a version that is no longer offered, or a failure the updater does not attach to an update.
