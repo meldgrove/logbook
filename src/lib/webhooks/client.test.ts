@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { setImmediate } from "node:timers/promises";
 import { describe, expect, it, vi } from "vitest";
 import { createWebhookClient, signWebhook, WebhookError } from "./client";
 import type { WebhookPayload } from "./payload";
@@ -44,11 +45,33 @@ describe("the webhook client", () => {
   it("fails on any answer other than 2xx, and on network errors", async () => {
     const rejected = receiver(new Response("unknown signature", { status: 401 }));
     await expect(createWebhookClient({ url: "https://hooks.example.org/x", secret: SECRET, fetch: rejected.fetch }).send(payload)).rejects.toThrow(
-      "The webhook answered HTTP 401 unknown signature",
+      /^The webhook answered HTTP 401$/,
     );
     const down = receiver(new Error("connect ECONNREFUSED"));
     await expect(createWebhookClient({ url: "https://hooks.example.org/x", secret: SECRET, fetch: down.fetch }).send(payload)).rejects.toBeInstanceOf(
       WebhookError,
     );
+  });
+
+  it.each([200, 503])("cancels the unused HTTP %i body without waiting for cancellation", async (status) => {
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const response = new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("provider response"));
+        controller.close();
+      },
+      cancel,
+    }), { status });
+    const readText = vi.spyOn(response, "text");
+    const fake = receiver(response);
+    const send = Promise.race([
+      createWebhookClient({ url: "https://hooks.example.org/x", secret: SECRET, fetch: fake.fetch }).send(payload),
+      setImmediate("cancellation still pending"),
+    ]);
+
+    if (response.ok) await expect(send).resolves.toBeUndefined();
+    else await expect(send).rejects.toThrow("The webhook answered HTTP 503");
+    expect(readText).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });

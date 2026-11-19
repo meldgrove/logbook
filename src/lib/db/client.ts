@@ -2,19 +2,26 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { getDatabaseConfig } from "@/lib/config";
 import { envValue } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import * as schema from "./schema";
 
 export type Database = NodePgDatabase<typeof schema>;
 export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export function createPool(connectionString: string, applicationName: string): Pool {
-  return new Pool({
+  const pool = new Pool({
     connectionString,
     application_name: applicationName,
     max: 10,
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 30_000,
   });
+  // pg discards the broken client. Handle the idle error so it cannot exit
+  // the process, and log selected fields because pg attaches the client.
+  pool.on("error", (error: Error & { code?: string }) => {
+    logger.warn({ applicationName, code: error.code, error: error.message }, "idle PostgreSQL connection failed");
+  });
+  return pool;
 }
 
 export function createDb(pool: Pool): Database {
