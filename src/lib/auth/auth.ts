@@ -60,6 +60,13 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
     basePath: "/api/auth",
     secret: config.BETTER_AUTH_SECRET,
     trustedOrigins: [config.LOGBOOK_BASE_URL],
+    logger: {
+      log(level) {
+        // Better Auth diagnostics can contain provider responses or database
+        // errors with session tokens and other bound values.
+        logger[level]("Better Auth reported an event");
+      },
+    },
     database: (options: BetterAuthOptions) => {
       const adapter = drizzleAdapter(db, {
         provider: "pg",

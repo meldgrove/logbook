@@ -8,6 +8,7 @@ import * as database from "@/lib/db/client";
 import { authAccount, authSession, person } from "@/lib/db/schema";
 import { createManualDirectory } from "@/lib/directory/manual";
 import { endSessionsForSubjects } from "@/lib/directory/sessions";
+import { logger } from "@/lib/logger";
 import * as access from "./access";
 import { createAuth, type Auth } from "./auth";
 import { getCurrentPerson } from "./session";
@@ -95,6 +96,18 @@ async function addPerson(values: Partial<typeof person.$inferInsert>) {
 }
 
 describe("login with the OIDC provider", () => {
+  it("omits Better Auth diagnostics from application logs", async () => {
+    const log = vi.spyOn(logger, "error");
+    try {
+      const context = await auth.$context;
+      context.logger.error("provider response details", { detail: "diagnostic data" });
+
+      expect(log.mock.calls).toEqual([["Better Auth reported an event"]]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("keeps each session with the person of the `sub` it logged in with", async () => {
     const ada = await addPerson({ oidcSubject: "sub-ada", displayName: "Ada" });
     const bea = await addPerson({ oidcSubject: "sub-bea", displayName: "Bea" });
