@@ -5,11 +5,11 @@
 #   docker compose up -d
 #
 # LOGBOOK_VERSION in .env selects the release of ghcr.io/meldgrove/logbook,
-# e.g. 0.2.0. To upgrade, read the release notes, change it, and run
-# `docker compose up -d` again. A tag that moves (0.2, latest) lets `updater`
-# install new releases (docs/deployment.md, Automatic updates). On a
-# platform that does not pull images when it deploys, PULL_POLICY=always
-# makes every start pull them again.
+# e.g. 0.2.0. `updater` installs new versions and, on a Debian server, writes
+# each into LOGBOOK_VERSION; admins see them in Logbook's update button
+# (docs/deployment.md, Automatic updates). On a platform, the tag set there
+# decides (0.2, latest, preview). On a platform that does not pull images
+# when it deploys, PULL_POLICY=always makes every start pull them again.
 #
 # Without a PostgreSQL of your own, add compose.postgres.yaml: it runs one
 # next to Logbook (docs/deployment.md).
@@ -28,6 +28,8 @@ x-app-environment: &app-environment
   DATABASE_URL: ${DATABASE_URL:?}
   TZ: ${TZ:-UTC}
   LOG_LEVEL: ${LOG_LEVEL:-info}
+  # The update button and the Updates card on the admin page ask `updater`.
+  UPDATER_URL: ${UPDATER_URL:-http://updater:8080}
 
 x-directory-environment: &directory-environment
   LOGBOOK_BASE_URL: ${LOGBOOK_BASE_URL:-${LOGBUCH_BASE_URL:?set LOGBOOK_BASE_URL to the public URL}}
@@ -111,17 +113,19 @@ services:
       retries: 3
       start_period: 30s
 
-  # Automatic updates (docs/deployment.md): off until UPDATE_DEPLOY_HOOK_URL
-  # is set (Coolify) or the server watches the volume `updater` (Debian:
-  # `updater host-setup`). When the tag in LOGBOOK_VERSION points to a new
-  # image, it calls that deploy link or leaves a request in the volume, and
-  # Coolify or the server deploys the new release.
+  # Automatic updates and the update button (docs/deployment.md). It checks
+  # for new versions; it installs them once UPDATE_DEPLOY_HOOK_URL is set
+  # (Coolify) or the server watches the volume `updater` (Debian: `updater
+  # host-setup`): it calls that deploy link, or the server pins the version
+  # in LOGBOOK_VERSION, pulls it, and starts it. No ports: its API has no
+  # authentication, and only `web` calls it.
   updater:
-    image: ghcr.io/meldgrove/updater:0.1
+    image: ghcr.io/meldgrove/updater:0.2
     pull_policy: ${PULL_POLICY:-missing}
     restart: unless-stopped
     environment:
       IMAGE: *image
+      VERSION_VARIABLE: LOGBOOK_VERSION
       DEPLOY_HOOK_URL: ${UPDATE_DEPLOY_HOOK_URL:-}
       DEPLOY_HOOK_TOKEN: ${UPDATE_DEPLOY_HOOK_TOKEN:-}
       # A release installs once it has been out this long, and only inside
@@ -129,9 +133,11 @@ services:
       COOLDOWN: ${UPDATE_COOLDOWN:-3d}
       WINDOW: ${UPDATE_WINDOW:-}
       TZ: ${TZ:-UTC}
+      REGISTRY_USERNAME: ${UPDATE_REGISTRY_USERNAME:-}
+      REGISTRY_PASSWORD: ${UPDATE_REGISTRY_PASSWORD:-}
     volumes:
       - updater:/trigger
 
 volumes:
-  # The updater's requests to the server (Debian, docs/deployment.md).
+  # The updater's state and its requests to the server (Debian, docs/deployment.md).
   updater:

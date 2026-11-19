@@ -33,6 +33,12 @@ export async function getCurrentPerson(): Promise<PersonRow | null> {
   return loaded?.person?.hasAccess ? loaded.person : null;
 }
 
+/** The admin behind this request, without redirecting (for admin-only route handlers, which answer 404 otherwise). */
+export async function getCurrentAdmin(): Promise<PersonRow | null> {
+  const person = await getCurrentPerson();
+  return person?.isAdmin ? person : null;
+}
+
 /** True when the request has a session, with or without access. */
 export async function hasSession(): Promise<boolean> {
   return (await loadRequestUser()) !== null;

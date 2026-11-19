@@ -4,6 +4,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
+import { displayPreferences } from "@/lib/preferences";
 import { getMyTasks } from "@/lib/process/queries";
 
 /** Set by the sidebar (`src/components/ui/sidebar.tsx`) when it is opened or collapsed. */
@@ -16,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <SidebarProvider defaultOpen={cookieStore.get(SIDEBAR_COOKIE)?.value !== "false"}>
       <AppSidebar user={{ name: person.displayName, email: person.workEmail }} isAdmin={person.isAdmin} taskCount={tasks.length} />
       <SidebarInset className="min-w-0">
-        <AppHeader />
+        <AppHeader isAdmin={person.isAdmin} preferences={displayPreferences(person)} />
         <div className="flex-1 px-4 py-6 md:px-8">
           <div className="mx-auto w-full max-w-5xl">{children}</div>
         </div>

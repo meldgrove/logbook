@@ -21,7 +21,8 @@ with shadcn/ui (Radix), pino, Vitest, Playwright.
   `src/lib/navigation.ts`.
 - `src/lib/<module>/`: `auth`, `directory` (manual and Keycloak directory),
   `db`, `entries`, `process`, `calendar`, `audit`, `health`, `jobs`,
-  `security`, `notifications`, `measures`, `webhooks`, `csv-import`.
+  `security`, `notifications`, `measures`, `webhooks`, `csv-import`,
+  `updates` (the updater's API for the update button).
 - `src/workers/`: the pg-boss worker. `src/scripts/`: migrate, directory
   sync, and the CSV import. Both are bundled with esbuild into `dist/`.
 - `drizzle/`: SQL migrations. `e2e/`: Playwright. `tests/`: test helpers and

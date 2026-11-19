@@ -1,8 +1,8 @@
 # Configuration
 
 Logbook reads its configuration from environment variables. Blank values count
-as unset. Every process validates what it needs at startup and stops with a
-list of missing or invalid variables.
+as unset, except for `UPDATER_URL`. Every process validates what it needs at
+startup and stops with a list of missing or invalid variables.
 
 Three processes run from one image (see [deployment](deployment.md)):
 `migrate`, `web`, and `worker`. The tables below say which process needs a
@@ -103,6 +103,18 @@ strings, or values from database queries. The browser sends nothing.
 | `SENTRY_ENVIRONMENT` | `production` | Environment name shown in Sentry, e.g. `staging` |
 | `SENTRY_RELEASE` | `logbook@<APP_VERSION>` in release images, otherwise none | Release name, e.g. the deployed commit SHA |
 
+## Updates (web)
+
+| Variable | Default | Value |
+|---|---|---|
+| `UPDATER_URL` | `http://updater:8080` | Address of the `updater` service's API, which the update button and the Updates card on the admin page ask. Under `compose.yaml`, an empty value also means the default; empty switches both off only where Logbook reads its environment directly, without Compose |
+
+The `updater` service itself takes `UPDATE_COOLDOWN`, `UPDATE_WINDOW`,
+`UPDATE_DEPLOY_HOOK_URL`, and `UPDATE_DEPLOY_HOOK_TOKEN` (see
+[automatic updates](deployment.md#automatic-updates)), and
+`UPDATE_REGISTRY_USERNAME` and `UPDATE_REGISTRY_PASSWORD` for an image in a
+private registry.
+
 ## Time zone
 
 Logbook uses the server's time zone, set with the standard `TZ` variable
@@ -123,4 +135,5 @@ date format is `DD.MM.YYYY`.
 | `MIGRATIONS_DIR` | `drizzle` | Folder with the SQL migrations |
 
 Docker Compose uses `LOGBOOK_VERSION` to select the image tag. It still
-accepts `LOGBUCH_VERSION` when `LOGBOOK_VERSION` is unset.
+accepts `LOGBUCH_VERSION` when `LOGBOOK_VERSION` is unset. On a Debian
+server, the updater writes each version it installs into `LOGBOOK_VERSION`.

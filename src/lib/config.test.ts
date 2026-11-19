@@ -5,6 +5,7 @@ import {
   parseDirectoryConfig,
   parseErrorReportingConfig,
   parseNotificationConfig,
+  parseUpdaterConfig,
   parseVersionConfig,
   parseWebhookConfig,
   validateWebConfig,
@@ -212,5 +213,24 @@ describe("parseErrorReportingConfig", () => {
     );
     expect(() => parseErrorReportingConfig({ SENTRY_DSN: "key@o1" })).toThrow(/SENTRY_DSN/);
     expect(() => validateWorkerConfig({ SENTRY_DSN: "key@o1" })).toThrow(/SENTRY_DSN/);
+  });
+});
+
+describe("parseUpdaterConfig", () => {
+  it("defaults to the updater service of compose.yaml", () => {
+    expect(parseUpdaterConfig({}).UPDATER_URL).toBe("http://updater:8080");
+  });
+
+  it("switches the update button off with an empty value", () => {
+    expect(parseUpdaterConfig({ UPDATER_URL: "" }).UPDATER_URL).toBeNull();
+    expect(parseUpdaterConfig({ UPDATER_URL: "  " }).UPDATER_URL).toBeNull();
+  });
+
+  it("takes another http URL without a trailing slash", () => {
+    expect(parseUpdaterConfig({ UPDATER_URL: "http://127.0.0.1:18082/" }).UPDATER_URL).toBe("http://127.0.0.1:18082");
+    expect(() => parseUpdaterConfig({ UPDATER_URL: "updater:8080" })).toThrow(/UPDATER_URL/);
+    expect(() => validateWebConfig({ ...auth, ...manualDirectory, DATABASE_URL: "postgres://x", UPDATER_URL: "ftp://updater" })).toThrow(
+      /UPDATER_URL/,
+    );
   });
 });
