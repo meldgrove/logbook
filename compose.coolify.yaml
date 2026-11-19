@@ -1,0 +1,137 @@
+# Logbook on Coolify only (docs/coolify.md); on a server, use compose.yaml.
+# Coolify reads this file from the branch `stable`, which is at the newest
+# release.
+#
+# Keep it in step with compose.yaml. It differs only in three points: `web`
+# publishes no port, only `expose:` 3000 (Coolify's proxy reaches it over the Docker network; assign
+# the domain to `web`, port 3000), every deploy pulls the images again (the tag
+# in LOGBOOK_VERSION moves: a series such as 0.2, latest or preview), and
+# `updater` calls Coolify's deploy link.
+#
+# PostgreSQL is a separate Coolify resource; set DATABASE_URL to its internal
+# URL and LOGBOOK_BASE_URL to the domain. Set the variables in the resource's
+# environment view.
+
+x-image: &image ghcr.io/meldgrove/logbook:${LOGBOOK_VERSION:-${LOGBUCH_VERSION:?set LOGBOOK_VERSION in .env to a release, e.g. 0.2.0}}
+
+x-app-environment: &app-environment
+  DATABASE_URL: ${DATABASE_URL:?}
+  TZ: ${TZ:-UTC}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  # The update button and the Updates card on the admin page ask `updater`.
+  UPDATER_URL: ${UPDATER_URL:-http://updater:8080}
+
+x-directory-environment: &directory-environment
+  LOGBOOK_BASE_URL: ${LOGBOOK_BASE_URL:-${LOGBUCH_BASE_URL:?set LOGBOOK_BASE_URL to the public URL}}
+  OIDC_ISSUER: ${OIDC_ISSUER:?}
+  OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?}
+  OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?}
+  DIRECTORY: ${DIRECTORY:-manual}
+  INITIAL_ADMIN_EMAILS: ${INITIAL_ADMIN_EMAILS:-}
+  KEYCLOAK_ACCESS_GROUP: ${KEYCLOAK_ACCESS_GROUP:-}
+  KEYCLOAK_ADMIN_GROUP: ${KEYCLOAK_ADMIN_GROUP:-}
+  KEYCLOAK_TEAMS_GROUP: ${KEYCLOAK_TEAMS_GROUP:-}
+  KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-}
+  KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
+
+# Error reporting to Sentry; off without SENTRY_DSN.
+x-error-reporting-environment: &error-reporting-environment
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+  SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+
+services:
+  migrate:
+    image: *image
+    pull_policy: always
+    command: ["migrate"]
+    restart: "no"
+    environment:
+      <<: *app-environment
+
+  web:
+    image: *image
+    pull_policy: always
+    command: ["web"]
+    restart: unless-stopped
+    # Coolify takes the proxy port from here when the domain names none.
+    expose:
+      - "3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: [*app-environment, *directory-environment, *error-reporting-environment]
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
+      OIDC_SCOPES: ${OIDC_SCOPES:-}
+      OIDC_TRUST_EMAIL: ${OIDC_TRUST_EMAIL:-}
+    healthcheck:
+      # Readiness: database reachable and migrations applied.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/-/readyz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    image: *image
+    pull_policy: always
+    command: ["worker"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: [*app-environment, *directory-environment, *error-reporting-environment]
+      # Each channel is off until it is configured.
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID:-}
+      SMTP_URL: ${SMTP_URL:-}
+      MAILERSEND_API_TOKEN: ${MAILERSEND_API_TOKEN:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-}
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+    healthcheck:
+      # The worker refreshes its heartbeat file every 30 seconds.
+      test: ["CMD", "node", "dist/worker-healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Automatic updates and the update button (docs/coolify.md). With
+  # UPDATE_DEPLOY_HOOK_URL set, it calls Coolify's deploy link when the tag in
+  # LOGBOOK_VERSION points to a new image: the tag decides what installs, so
+  # admins cannot choose the channel in Logbook. No ports: its API has no
+  # authentication, and only `web` calls it.
+  updater:
+    image: ghcr.io/meldgrove/updater:0.2
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      IMAGE: *image
+      VERSION_VARIABLE: LOGBOOK_VERSION
+      DEPLOY_HOOK_URL: ${UPDATE_DEPLOY_HOOK_URL:-}
+      DEPLOY_HOOK_TOKEN: ${UPDATE_DEPLOY_HOOK_TOKEN:-}
+      # A release installs once it has been out this long, and only inside
+      # the window, if one is set (e.g. 02:00-05:00, in the time zone TZ).
+      COOLDOWN: ${UPDATE_COOLDOWN:-3d}
+      WINDOW: ${UPDATE_WINDOW:-}
+      TZ: ${TZ:-UTC}
+      REGISTRY_USERNAME: ${UPDATE_REGISTRY_USERNAME:-}
+      REGISTRY_PASSWORD: ${UPDATE_REGISTRY_PASSWORD:-}
+    volumes:
+      - updater:/trigger
+
+volumes:
+  # Automatic updates and the update button (docs/coolify.md). With
+  # UPDATE_DEPLOY_HOOK_URL set, it calls Coolify's deploy link when the tag in
+  # LOGBOOK_VERSION points to a new image: the tag decides what installs, so
+  # admins cannot choose the channel in Logbook. No ports: its API has no
+  # authentication, and only `web` calls it.
+  updater:

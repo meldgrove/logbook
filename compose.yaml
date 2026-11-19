@@ -1,26 +1,25 @@
-# Logbook in production: one image, three services, and the PostgreSQL 18 in
-# DATABASE_URL.
+# Logbook in production on a Linux server (Debian, Ubuntu) with Docker
+# Compose: one image, three services, the `updater` for automatic updates, and
+# the PostgreSQL 18 in DATABASE_URL. Settings live in .env next to this file:
 #
 #   cp .env.example .env    # then set the production values, see docs/configuration.md
-#   docker compose up -d
+#   docker compose up -d --pull always
 #
-# LOGBOOK_VERSION in .env selects the release of ghcr.io/meldgrove/logbook,
-# e.g. 0.2.0. `updater` installs new versions and, on a Debian server, writes
-# each into LOGBOOK_VERSION; admins see them in Logbook's update button
-# (docs/deployment.md, Automatic updates). On a platform, the tag set there
-# decides (0.2, latest, preview). On a platform that does not pull images
-# when it deploys, PULL_POLICY=always makes every start pull them again.
+# LOGBOOK_VERSION in .env selects the release of ghcr.io/meldgrove/logbook:
+# a version such as 0.2.0, or a series such as 0.2. With automatic updates
+# (docs/deployment.md), the server writes each version it installs there, and
+# admins see new versions in Logbook's update button.
 #
 # Without a PostgreSQL of your own, add compose.postgres.yaml: it runs one
 # next to Logbook (docs/deployment.md).
 #
-# Put a TLS-terminating reverse proxy in front of `web` (port 3000) and set
+# `web` listens on 127.0.0.1:3000 (LOGBOOK_PORT changes the host port), for a
+# reverse proxy on the same server, such as Caddy, that terminates HTTPS; set
 # LOGBOOK_BASE_URL to its public URL. `migrate` runs once before `web` and
-# `worker` start. Platforms that run Compose files can use this file as it
-# is; set the variables in their environment view. A platform that reads the
-# file from the repository follows the branch `stable`, which is at the
-# newest release; `main` has unreleased changes.
-# Local development uses compose.dev.yaml.
+# `worker` start. Back up the database. The branch `stable` is at the newest
+# release; `main` has unreleased changes. On Coolify, use
+# compose.coolify.yaml (docs/coolify.md). Local development uses
+# compose.dev.yaml.
 
 x-image: &image ghcr.io/meldgrove/logbook:${LOGBOOK_VERSION:-${LOGBUCH_VERSION:?set LOGBOOK_VERSION in .env to a release, e.g. 0.2.0}}
 
@@ -53,7 +52,6 @@ x-error-reporting-environment: &error-reporting-environment
 services:
   migrate:
     image: *image
-    pull_policy: ${PULL_POLICY:-missing}
     command: ["migrate"]
     restart: "no"
     environment:
@@ -61,14 +59,15 @@ services:
 
   web:
     image: *image
-    pull_policy: ${PULL_POLICY:-missing}
     command: ["web"]
     restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:3000:3000"
+      # Only on the server itself, for the reverse proxy. LOGBOOK_PORT picks
+      # another host port when 3000 is taken, e.g. by another app.
+      - "127.0.0.1:${LOGBOOK_PORT:-3000}:3000"
     environment:
       <<: [*app-environment, *directory-environment, *error-reporting-environment]
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
@@ -88,7 +87,6 @@ services:
 
   worker:
     image: *image
-    pull_policy: ${PULL_POLICY:-missing}
     command: ["worker"]
     restart: unless-stopped
     depends_on:
@@ -114,20 +112,18 @@ services:
       start_period: 30s
 
   # Automatic updates and the update button (docs/deployment.md). It checks
-  # for new versions; it installs them once UPDATE_DEPLOY_HOOK_URL is set
-  # (Coolify) or the server watches the volume `updater` (Debian: `updater
-  # host-setup`): it calls that deploy link, or the server pins the version
-  # in LOGBOOK_VERSION, pulls it, and starts it. No ports: its API has no
-  # authentication, and only `web` calls it.
+  # for new versions; it installs them once the server runs `updater
+  # host-setup`: then admins choose Stable or Preview in Logbook, and for each
+  # installation the server writes the version into LOGBOOK_VERSION, pulls it,
+  # runs `docker compose up --wait`, and goes back to the version before when
+  # it does not become healthy. No ports: its API has no authentication, and
+  # only `web` calls it.
   updater:
     image: ghcr.io/meldgrove/updater:0.2
-    pull_policy: ${PULL_POLICY:-missing}
     restart: unless-stopped
     environment:
       IMAGE: *image
       VERSION_VARIABLE: LOGBOOK_VERSION
-      DEPLOY_HOOK_URL: ${UPDATE_DEPLOY_HOOK_URL:-}
-      DEPLOY_HOOK_TOKEN: ${UPDATE_DEPLOY_HOOK_TOKEN:-}
       # A release installs once it has been out this long, and only inside
       # the window, if one is set (e.g. 02:00-05:00, in the time zone TZ).
       COOLDOWN: ${UPDATE_COOLDOWN:-3d}
