@@ -4,11 +4,12 @@ import { and, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAuth } from "@/lib/auth/auth";
-import { getAuthConfig } from "@/lib/config";
 import { getOidcEndpoints } from "@/lib/auth/oidc-discovery";
+import { getAuthConfig } from "@/lib/config";
 import { getDb } from "@/lib/db/client";
 import { authAccount } from "@/lib/db/schema";
 import { OIDC_PROVIDER_ID } from "@/lib/directory/sessions";
+import { logger } from "@/lib/logger";
 
 /** Starts the login at the identity provider (authorization code flow with PKCE). */
 export async function signInAction(): Promise<void> {
@@ -40,11 +41,16 @@ export async function signOutAction(): Promise<void> {
   if (session) {
     // The shared Better Auth user may have several OIDC subjects. Use only
     // the token for the subject that started this Logbook session.
-    const [account] = await getDb()
-      .select({ idToken: authAccount.idToken })
-      .from(authAccount)
-      .where(and(eq(authAccount.providerId, OIDC_PROVIDER_ID), eq(authAccount.accountId, session.session.oidcSubject)));
-    if (account?.idToken) logoutUrl.searchParams.set("id_token_hint", account.idToken);
+    try {
+      const [account] = await getDb()
+        .select({ idToken: authAccount.idToken })
+        .from(authAccount)
+        .where(and(eq(authAccount.providerId, OIDC_PROVIDER_ID), eq(authAccount.accountId, session.session.oidcSubject)));
+      if (account?.idToken) logoutUrl.searchParams.set("id_token_hint", account.idToken);
+    } catch {
+      logger.warn("Could not read the provider logout token");
+      redirect("/login");
+    }
   }
   redirect(logoutUrl.toString());
 }

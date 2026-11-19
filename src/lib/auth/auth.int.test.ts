@@ -4,7 +4,7 @@ import { connectTestDatabase } from "../../../tests/integration/db";
 import { startFakeOidcProvider, type FakeOidcProvider, type OidcIdentity } from "../../../tests/integration/oidc-provider";
 import { signOutAction } from "@/app/actions";
 import * as config from "@/lib/config";
-import { getPool } from "@/lib/db/client";
+import * as database from "@/lib/db/client";
 import { authAccount, authSession, person } from "@/lib/db/schema";
 import { createManualDirectory } from "@/lib/directory/manual";
 import { endSessionsForSubjects } from "@/lib/directory/sessions";
@@ -48,7 +48,7 @@ beforeAll(async () => {
 beforeEach(() => testDb.reset());
 afterAll(async () => {
   await provider.close();
-  await getPool().end();
+  await database.getPool().end();
   await testDb.close();
 });
 
@@ -186,6 +186,21 @@ describe("login with the OIDC provider", () => {
     expect(logoutUrl.searchParams.get("id_token_hint")).toBe(provider.tokensFor(ada.code)?.idToken);
     expect(await personFor(ada.cookie)).toBeNull();
     expect(await personFor(bea.cookie)).toMatchObject({ oidcSubject: "sub-bea" });
+  });
+
+  it("returns to login after local sign-out when the provider token cannot be read", async () => {
+    await addPerson({ oidcSubject: "sub-ada" });
+    const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
+    request.headers = new Headers({ cookie });
+    const getDb = vi.spyOn(database, "getDb").mockImplementationOnce(() => { throw new Error("database unavailable"); });
+
+    try {
+      await expect(signOutAction()).rejects.toThrow("redirect");
+      expect(request.redirect).toHaveBeenLastCalledWith("/login");
+      expect(await personFor(cookie)).toBeNull();
+    } finally {
+      getDb.mockRestore();
+    }
   });
 
   it("gives no session to someone without access", async () => {
