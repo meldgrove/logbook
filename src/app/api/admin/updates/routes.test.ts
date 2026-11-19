@@ -22,7 +22,7 @@ vi.mock("@/lib/auth/auth", () => ({
     api: {
       getSession: async () => {
         const person = await mocks.person();
-        return person ? { session: { id: "session", oidcSubject: person.id }, user: { id: "user" } } : null;
+        return person ? { session: { id: "session", oidcPersonId: person.id }, user: { id: "user" } } : null;
       },
     },
   }),

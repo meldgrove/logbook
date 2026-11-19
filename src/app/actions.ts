@@ -7,7 +7,7 @@ import { getAuth } from "@/lib/auth/auth";
 import { getOidcEndpoints } from "@/lib/auth/oidc-discovery";
 import { getAuthConfig } from "@/lib/config";
 import { getDb } from "@/lib/db/client";
-import { authAccount } from "@/lib/db/schema";
+import { authAccount, person } from "@/lib/db/schema";
 import { OIDC_PROVIDER_ID } from "@/lib/directory/sessions";
 import { logger } from "@/lib/logger";
 
@@ -38,14 +38,19 @@ export async function signOutAction(): Promise<void> {
   const logoutUrl = new URL(endSession);
   logoutUrl.searchParams.set("client_id", config.OIDC_CLIENT_ID);
   logoutUrl.searchParams.set("post_logout_redirect_uri", `${config.LOGBOOK_BASE_URL}/`);
-  if (session) {
+  if (session?.session.oidcPersonId) {
     // The shared Better Auth user may have several OIDC subjects. Use only
     // the token for the subject that started this Logbook session.
     try {
       const [account] = await getDb()
         .select({ idToken: authAccount.idToken })
         .from(authAccount)
-        .where(and(eq(authAccount.providerId, OIDC_PROVIDER_ID), eq(authAccount.accountId, session.session.oidcSubject)));
+        .innerJoin(person, eq(person.oidcSubject, authAccount.accountId))
+        .where(and(
+          eq(authAccount.providerId, OIDC_PROVIDER_ID),
+          eq(authAccount.accountId, session.session.oidcSubject),
+          eq(person.id, session.session.oidcPersonId),
+        ));
       if (account?.idToken) logoutUrl.searchParams.set("id_token_hint", account.idToken);
     } catch {
       logger.warn("Could not read the provider logout token");

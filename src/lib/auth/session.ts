@@ -22,7 +22,7 @@ export interface CurrentUser {
 const loadRequestUser = cache(async () => {
   const requestHeaders = await headers();
   const session = await getAuth().api.getSession({ headers: requestHeaders });
-  if (!session) return null;
+  if (!session?.session.oidcPersonId) return null;
   const person = await findPersonForSession(getDb(), session.session.id);
   return { session, person };
 });

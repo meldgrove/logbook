@@ -8,6 +8,7 @@ import * as database from "@/lib/db/client";
 import { authAccount, authSession, person } from "@/lib/db/schema";
 import { createManualDirectory } from "@/lib/directory/manual";
 import { endSessionsForSubjects } from "@/lib/directory/sessions";
+import * as access from "./access";
 import { createAuth, type Auth } from "./auth";
 import { getCurrentPerson } from "./session";
 
@@ -119,14 +120,25 @@ describe("login with the OIDC provider", () => {
     const subject = "sub-ada";
     const ada = await addPerson({ oidcSubject: subject });
     const { cookie } = await logIn({ sub: subject, email: "ada@example.org" });
-    const [session] = await db.select().from(authSession);
     const stale = await auth.api.getSession({ headers: new Headers({ cookie }) });
 
-    await db.transaction(async (tx) => {
-      await tx.update(person).set({ oidcSubject: null }).where(eq(person.id, ada.id));
-      await tx.insert(person).values({ displayName: "New owner", oidcSubject: subject, hasAccess: true, isAdmin: true });
-      await endSessionsForSubjects(tx, [subject]);
+    const admitLogin = access.admitLogin;
+    const admission = vi.spyOn(access, "admitLogin").mockImplementationOnce(async (...args) => {
+      const personId = await admitLogin(...args);
+      await db.transaction(async (tx) => {
+        await tx.update(person).set({ oidcSubject: null }).where(eq(person.id, ada.id));
+        await tx.insert(person).values({ displayName: "New owner", oidcSubject: subject, hasAccess: true, isAdmin: true });
+        await endSessionsForSubjects(tx, [subject]);
+      });
+      return personId;
     });
+    try {
+      const login = await logIn({ sub: subject, email: "ada@example.org" });
+      expect(login.response.headers.get("location")).toContain("/login?error=NO_ACCESS");
+      expect(login.cookie).not.toContain("session_token");
+    } finally {
+      admission.mockRestore();
+    }
 
     // A request whose cookie lookup preceded the sync still checks the live row.
     const sessionLookup = vi.spyOn(auth.api, "getSession").mockResolvedValueOnce(stale);
@@ -135,12 +147,17 @@ describe("login with the OIDC provider", () => {
     } finally {
       sessionLookup.mockRestore();
     }
-    // A callback admitted before the sync cannot insert its old binding after it.
-    await expect(db.insert(authSession).values({
-      ...session!,
-      id: "late-session",
-      token: "late-token",
-    })).rejects.toMatchObject({ cause: { code: "23514" } });
+    expect(await db.select().from(authSession)).toHaveLength(0);
+  });
+
+  it("requires a fresh sign-in for a legacy session without a person binding", async () => {
+    await addPerson({ oidcSubject: "sub-ada" });
+    const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
+    await db.update(authSession).set({ oidcPersonId: null });
+
+    expect(await personFor(cookie)).toBeNull();
+    const fresh = await logIn({ sub: "sub-ada", email: "ada@example.org" });
+    expect(await personFor(fresh.cookie)).toMatchObject({ oidcSubject: "sub-ada" });
   });
 
   it("links an invitation at the first login", async () => {

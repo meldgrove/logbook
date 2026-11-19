@@ -1,8 +1,10 @@
-import { betterAuth } from "better-auth";
+import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
+import { DrizzleQueryError } from "drizzle-orm";
+import { DatabaseError } from "pg";
 import { getAuthConfig, type AuthConfig } from "@/lib/config";
 import { getDb, type Database } from "@/lib/db/client";
 import { authAccount, authSession, authUser, authVerification } from "@/lib/db/schema";
@@ -38,6 +40,13 @@ function loginSubjectOf(context: object | null, userId: string): string | undefi
   return login?.userId === userId ? login.subject : undefined;
 }
 
+function noAccessError() {
+  return new APIError("FORBIDDEN", {
+    code: NO_ACCESS_ERROR_CODE,
+    message: "You do not have access to Logbook.",
+  });
+}
+
 /**
  * Better Auth with one OpenID Connect provider (authorization code flow with
  * PKCE) as the only login. Endpoints, including logout, come from the
@@ -51,10 +60,26 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
     basePath: "/api/auth",
     secret: config.BETTER_AUTH_SECRET,
     trustedOrigins: [config.LOGBOOK_BASE_URL],
-    database: drizzleAdapter(db, {
-      provider: "pg",
-      schema: { user: authUser, session: authSession, account: authAccount, verification: authVerification },
-    }),
+    database: (options: BetterAuthOptions) => {
+      const adapter = drizzleAdapter(db, {
+        provider: "pg",
+        schema: { user: authUser, session: authSession, account: authAccount, verification: authVerification },
+      })(options);
+      const create: typeof adapter.create = async (input) => {
+        try {
+          return await adapter.create(input);
+        } catch (error) {
+          // A subject can move after admission. Report the expected denial
+          // before Better Auth sees a query error with session parameters.
+          if (error instanceof DrizzleQueryError && error.cause instanceof DatabaseError
+            && error.cause.constraint === "logbook_session_person_binding") {
+            throw noAccessError();
+          }
+          throw error;
+        }
+      };
+      return { ...adapter, create };
+    },
     emailAndPassword: { enabled: false },
     user: {
       validateUserInfo({ user, source }, context) {
@@ -108,10 +133,7 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
               : undefined;
             if (subject === undefined || !personId) {
               logger.info({ userId: session.userId }, "login denied: no access");
-              throw new APIError("FORBIDDEN", {
-                code: NO_ACCESS_ERROR_CODE,
-                message: "You do not have access to Logbook.",
-              });
+              throw noAccessError();
             }
             return { data: { ...session, oidcSubject: subject, oidcPersonId: personId } };
           },
