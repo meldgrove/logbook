@@ -21,24 +21,24 @@ export function createManualDirectory({ initialAdmins }: { initialAdmins: string
     editable: true,
     sync: null,
     async admitNewLogin(db, login) {
-      if (login.known) return false;
+      if (login.known) return undefined;
       return linkFirstLogin(db, login, initialAdmins);
     },
   };
 }
 
-async function linkFirstLogin(db: Database, login: NewLogin, initialAdmins: string[]): Promise<boolean> {
+async function linkFirstLogin(db: Database, login: NewLogin, initialAdmins: string[]): Promise<string | undefined> {
   const { subject, trustEmail, now } = login;
   // Only the email from this OIDC login may claim an invitation.
   const email = login.email.trim().toLowerCase();
-  if (!email || !(login.emailVerified || trustEmail)) return false;
+  if (!email || !(login.emailVerified || trustEmail)) return undefined;
   const name = login.name.trim();
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${LINK_LOCK_KEY})`);
     // Another login of the same user may have linked it meanwhile.
     const linked = await findPersonBySubject(tx, subject);
-    if (linked) return linked.hasAccess;
+    if (linked) return linked.hasAccess ? linked.id : undefined;
 
     const [invited] = await tx
       .select()
@@ -52,16 +52,16 @@ async function linkFirstLogin(db: Database, login: NewLogin, initialAdmins: stri
         .set({ oidcSubject: subject, displayName: name || invited.displayName, updatedAt: now })
         .where(eq(person.id, invited.id));
       await recordAudit(tx, { actorId: invited.id, action: "person.linked", payload: { email } });
-      return true;
+      return invited.id;
     }
 
-    if (!initialAdmins.includes(email)) return false;
+    if (!initialAdmins.includes(email)) return undefined;
     const [admin] = await tx
       .select({ id: person.id })
       .from(person)
       .where(and(eq(person.isAdmin, true), eq(person.hasAccess, true)))
       .limit(1);
-    if (admin) return false;
+    if (admin) return undefined;
     const [created] = await tx
       .insert(person)
       .values({
@@ -74,6 +74,6 @@ async function linkFirstLogin(db: Database, login: NewLogin, initialAdmins: stri
       })
       .returning({ id: person.id });
     await recordAudit(tx, { actorId: created!.id, action: "person.first_admin", payload: { email } });
-    return true;
+    return created!.id;
   });
 }

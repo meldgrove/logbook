@@ -29,10 +29,9 @@ export interface Directory {
   /** The sync from Keycloak, or null when there is nothing to sync. */
   readonly sync: DirectorySync | null;
   /**
-   * Whether someone who logged in, but is not (yet) a person with access,
-   * gets a session.
+   * The person ID for a login not yet authorized, if the directory admits it.
    */
-  admitNewLogin(db: Database, login: NewLogin): Promise<boolean>;
+  admitNewLogin(db: Database, login: NewLogin): Promise<string | undefined>;
 }
 
 export interface DirectorySync {
@@ -67,7 +66,8 @@ export function createKeycloakDirectory(sync: DirectorySync): Directory {
     sync,
     async admitNewLogin(db, login) {
       await sync.run("login", LOGIN_SYNC_MIN_INTERVAL_MS);
-      return (await findPersonBySubject(db, login.subject))?.hasAccess === true;
+      const person = await findPersonBySubject(db, login.subject);
+      return person?.hasAccess ? person.id : undefined;
     },
   };
 }

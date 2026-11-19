@@ -27,7 +27,7 @@ vi.mock("@/lib/auth/auth", () => ({
     },
   }),
 }));
-vi.mock("@/lib/directory/queries", () => ({ findPersonBySubject: async () => mocks.person() }));
+vi.mock("@/lib/directory/queries", () => ({ findPersonForSession: async () => mocks.person() }));
 vi.mock("@/lib/db/client", () => ({ getDb: () => ({}) }));
 vi.mock("@/lib/config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/config")>()),

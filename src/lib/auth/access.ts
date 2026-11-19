@@ -26,9 +26,9 @@ export interface Login {
  * manual directory links an invitation at the first login, the Keycloak
  * directory syncs once and looks again.
  */
-export async function hasLoginAccess(db: Database, login: Login, options: LoginAccessOptions): Promise<boolean> {
+export async function admitLogin(db: Database, login: Login, options: LoginAccessOptions): Promise<string | undefined> {
   const known = await findPersonBySubject(db, login.subject);
-  if (known?.hasAccess) return true;
+  if (known?.hasAccess) return known.id;
   return options.directory.admitNewLogin(db, {
     ...login,
     known: known !== undefined,

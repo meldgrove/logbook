@@ -9,7 +9,7 @@ import { authAccount, authSession, authUser, authVerification } from "@/lib/db/s
 import { getDirectory, type Directory } from "@/lib/directory/directory";
 import { OIDC_PROVIDER_ID } from "@/lib/directory/sessions";
 import { logger } from "@/lib/logger";
-import { hasLoginAccess, NO_ACCESS_ERROR_CODE, type Login } from "./access";
+import { admitLogin, NO_ACCESS_ERROR_CODE, type Login } from "./access";
 import { discoveryUrl } from "./discovery-url";
 
 export interface CreateAuthOptions {
@@ -75,6 +75,7 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
       additionalFields: {
         // Set by the session hook below, never from the request.
         oidcSubject: { type: "string", required: true, input: false },
+        oidcPersonId: { type: "string", required: false, input: false },
       },
     },
     // Logbook never uses the provider's access and refresh tokens, but
@@ -99,20 +100,20 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
           before: async (session, context) => {
             const subject = loginSubjectOf(context, session.userId);
             const profile = context ? loginProfiles.get(context) : undefined;
-            const allowed =
-              subject !== undefined && profile !== undefined &&
-              (await hasLoginAccess(db, { ...profile, subject }, {
+            const personId = subject !== undefined && profile !== undefined
+              ? await admitLogin(db, { ...profile, subject }, {
                 directory,
                 trustEmail: config.OIDC_TRUST_EMAIL,
-              }));
-            if (!allowed) {
+              })
+              : undefined;
+            if (subject === undefined || !personId) {
               logger.info({ userId: session.userId }, "login denied: no access");
               throw new APIError("FORBIDDEN", {
                 code: NO_ACCESS_ERROR_CODE,
                 message: "You do not have access to Logbook.",
               });
             }
-            return { data: { ...session, oidcSubject: subject } };
+            return { data: { ...session, oidcSubject: subject, oidcPersonId: personId } };
           },
         },
       },

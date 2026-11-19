@@ -106,12 +106,41 @@ describe("login with the OIDC provider", () => {
     expect((await personFor(second.cookie))?.id).toBe(bea.id);
     const sessions = await db.select().from(authSession).orderBy(authSession.createdAt);
     expect(sessions.map((s) => s.oidcSubject)).toEqual(["sub-ada", "sub-bea"]);
+    expect(sessions.map((s) => s.oidcPersonId)).toEqual([ada.id, bea.id]);
     expect(sessions[0]!.userId).toBe(sessions[1]!.userId);
 
     // Ending the sessions of one subject leaves the other's.
     await endSessionsForSubjects(db, ["sub-bea"]);
     expect((await personFor(first.cookie))?.id).toBe(ada.id);
     expect(await personFor(second.cookie)).toBeNull();
+  });
+
+  it("rejects an in-flight session when its admitted person loses the subject", async () => {
+    const subject = "sub-ada";
+    const ada = await addPerson({ oidcSubject: subject });
+    const { cookie } = await logIn({ sub: subject, email: "ada@example.org" });
+    const [session] = await db.select().from(authSession);
+    const stale = await auth.api.getSession({ headers: new Headers({ cookie }) });
+
+    await db.transaction(async (tx) => {
+      await tx.update(person).set({ oidcSubject: null }).where(eq(person.id, ada.id));
+      await tx.insert(person).values({ displayName: "New owner", oidcSubject: subject, hasAccess: true, isAdmin: true });
+      await endSessionsForSubjects(tx, [subject]);
+    });
+
+    // A request whose cookie lookup preceded the sync still checks the live row.
+    const sessionLookup = vi.spyOn(auth.api, "getSession").mockResolvedValueOnce(stale);
+    try {
+      expect(await personFor(cookie)).toBeNull();
+    } finally {
+      sessionLookup.mockRestore();
+    }
+    // A callback admitted before the sync cannot insert its old binding after it.
+    await expect(db.insert(authSession).values({
+      ...session!,
+      id: "late-session",
+      token: "late-token",
+    })).rejects.toMatchObject({ cause: { code: "23514" } });
   });
 
   it("links an invitation at the first login", async () => {

@@ -1,6 +1,6 @@
 import { and, count, desc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/lib/db/client";
-import { directorySyncRun, person, team, workerHeartbeat } from "@/lib/db/schema";
+import { authSession, directorySyncRun, person, team, workerHeartbeat } from "@/lib/db/schema";
 import { OIDC_PROVIDER_ID } from "./sessions";
 
 export { OIDC_PROVIDER_ID };
@@ -10,6 +10,14 @@ export type PersonRow = typeof person.$inferSelect;
 export async function findPersonBySubject(db: Database | Transaction, subject: string): Promise<PersonRow | undefined> {
   const [row] = await db.select().from(person).where(eq(person.oidcSubject, subject)).limit(1);
   return row;
+}
+
+/** Checks the live session and its person binding in one database snapshot. */
+export async function findPersonForSession(db: Database, sessionId: string): Promise<PersonRow | undefined> {
+  const [row] = await db.select({ person }).from(authSession)
+    .innerJoin(person, and(eq(person.id, authSession.oidcPersonId), eq(person.oidcSubject, authSession.oidcSubject)))
+    .where(eq(authSession.id, sessionId));
+  return row?.person;
 }
 
 /** The worker writes a heartbeat every 30 seconds. */

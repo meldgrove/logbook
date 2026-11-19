@@ -76,6 +76,8 @@ export const authSession = pgTable(
      * email), so the person behind a session is found by this, not by the user.
      */
     oidcSubject: text("oidc_subject").notNull(),
+    // Nullable for legacy rows with no corresponding directory person.
+    oidcPersonId: uuid("oidc_person_id"),
   },
   (table) => [
     index("auth_session_user_id_idx").on(table.userId),
