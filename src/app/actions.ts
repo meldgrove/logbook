@@ -13,12 +13,19 @@ import { logger } from "@/lib/logger";
 
 /** Starts the login at the identity provider (authorization code flow with PKCE). */
 export async function signInAction(): Promise<void> {
-  const result = await getAuth().api.signInSocial({
-    body: { provider: OIDC_PROVIDER_ID, callbackURL: "/", errorCallbackURL: "/login" },
-    headers: await headers(),
-  });
-  if (!result.url) throw new Error("Better Auth returned no authorization URL");
-  redirect(result.url);
+  let url: string;
+  try {
+    const result = await getAuth().api.signInSocial({
+      body: { provider: OIDC_PROVIDER_ID, callbackURL: "/", errorCallbackURL: "/login" },
+      headers: await headers(),
+    });
+    if (!result.url) throw new Error("Better Auth returned no authorization URL");
+    url = result.url;
+  } catch {
+    logger.error("Could not start OIDC sign-in");
+    redirect("/login?error=OIDC_SIGN_IN_FAILED");
+  }
+  redirect(url);
 }
 
 /**

@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectTestDatabase } from "../../../tests/integration/db";
 import { startFakeOidcProvider, type FakeOidcProvider, type OidcIdentity } from "../../../tests/integration/oidc-provider";
-import { signOutAction } from "@/app/actions";
+import { signInAction, signOutAction } from "@/app/actions";
 import { GET as oidcCallback } from "@/app/api/auth/callback/oidc/route";
 import * as config from "@/lib/config";
 import * as database from "@/lib/db/client";
@@ -104,6 +104,19 @@ describe("login with the OIDC provider", () => {
 
       expect(log.mock.calls).toEqual([["Better Auth reported an event"]]);
     } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("redirects to a generic error when sign-in cannot start", async () => {
+    const start = vi.spyOn(auth.api, "signInSocial").mockRejectedValueOnce(new Error("diagnostic details"));
+    const log = vi.spyOn(logger, "error");
+    try {
+      await expect(signInAction()).rejects.toThrow("redirect");
+      expect(request.redirect).toHaveBeenLastCalledWith("/login?error=OIDC_SIGN_IN_FAILED");
+      expect(log.mock.calls).toEqual([["Could not start OIDC sign-in"]]);
+    } finally {
+      start.mockRestore();
       log.mockRestore();
     }
   });
