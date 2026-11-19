@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 
 /** The Logbook mark, as in the app icon (`src/app/icon.svg`). */
 export function Logo({ className }: { className?: string }) {

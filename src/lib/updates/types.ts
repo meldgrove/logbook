@@ -3,8 +3,8 @@ import { z } from "zod";
 /*
  * The Meldgrove Updater's API (contract:
  * https://github.com/meldgrove/updater#the-apps-update-button) and the answer
- * of Logbook's own routes under /api/admin/updates. Client components import
- * only the types.
+ * of Logbook's own routes under /api/admin/updates. The update button and the
+ * Updates card (@meldgrove/ui/updates) read the same answer.
  */
 
 const isoDate = z.string();
@@ -63,7 +63,6 @@ export const statusSchema = z.object({
   timezone: z.string(),
 });
 
-export type Update = z.infer<typeof updateSchema>;
 export type UpdaterStatus = z.infer<typeof statusSchema>;
 export type Channel = UpdaterStatus["channel"];
 
@@ -85,18 +84,3 @@ export const installableVersion = z
 
 export const installRequestSchema = z.object({ version: installableVersion });
 export const channelRequestSchema = z.object({ channel: z.enum(["stable", "preview"]) });
-
-/** How a browser request to a route under /api/admin/updates ended. */
-export type UpdatesRequestResult =
-  /** An answer with a status (2xx–4xx). */
-  | { kind: "answer"; httpStatus: number; body: UpdatesResponse }
-  /**
-   * No answer, no answer in time, a 5xx, or an answer that cannot be read:
-   * Logbook restarts (or the network is down). `httpStatus`: of the answer,
-   * when one arrived (a 202 whose body broke off still started an installation).
-   */
-  | { kind: "outage"; httpStatus: number | null; message: string }
-  /** 401, 403, Logbook's 404, or a sign-in page instead of JSON: the admin session ended (or a POST came from elsewhere). */
-  | { kind: "signed-out"; message: string }
-  /** Another 4xx without a status, such as 400. */
-  | { kind: "error"; httpStatus: number; message: string };

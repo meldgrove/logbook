@@ -1,3 +1,14 @@
+import { Alert, AlertDescription, AlertTitle } from "@meldgrove/ui/alert";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@meldgrove/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@meldgrove/ui/collapsible";
+import { Input } from "@meldgrove/ui/input";
+import { Item, ItemActions, ItemContent, ItemTitle } from "@meldgrove/ui/item";
+import { Label } from "@meldgrove/ui/label";
+import { NativeSelect, NativeSelectOption } from "@meldgrove/ui/native-select";
+import { Textarea } from "@meldgrove/ui/textarea";
+import { cn } from "@meldgrove/ui/utils";
 import { Check, ChevronDown, CircleAlert, Gavel, History, Pencil } from "lucide-react";
 import Link from "next/link";
 import {
@@ -27,16 +38,6 @@ import { OptionPicker, type PickerOption } from "@/components/form/option-picker
 import { PersonalDataField, PersonalDataNotice } from "@/components/form/personal-data-field";
 import { Markdown } from "@/components/markdown";
 import { PageHeader } from "@/components/page-header";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
-import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item";
-import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { Textarea } from "@/components/ui/textarea";
 import { REVERSIBILITY_LABELS, SUMMARY_MAX } from "@/lib/entries/constants";
 import { textDiff } from "@/lib/entries/diff";
 import type { EntryDetail } from "@/lib/entries/queries";
@@ -45,7 +46,6 @@ import { getFormatter } from "@/lib/auth/session";
 import { clipText, DEADLINE_END } from "@/lib/format";
 import type { ProposalView } from "@/lib/process/queries";
 import { MINIMUM_PERIODS, mayGiveConsent, type ParticipantState } from "@/lib/process/rules";
-import { cn } from "@/lib/utils";
 import { AddPersonFields } from "./add-person-fields";
 import { PROPOSAL_BADGES, STATUS_LABELS } from "./labels";
 

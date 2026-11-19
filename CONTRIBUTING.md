@@ -62,8 +62,10 @@ recorded, and why nothing is deleted. In short:
 Dependabot (`.github/dependabot.yml`) opens weekly pull requests for npm,
 GitHub Actions, the Docker base image, and the Compose images. Minor and
 patch updates come grouped; a major update comes alone and may need code
-changes. Two versions it cannot see; update them by hand in the same pull
-request:
+changes. `@meldgrove/ui` (the shared components, theme, and update button)
+comes in a pull request of its own as soon as it is released, without the
+week other packages wait. Two versions it cannot see; update them by hand in
+the same pull request:
 
 - `NODE_VERSION` in `.github/workflows/ci.yml`, with the `node` image in the
   `Dockerfile`.

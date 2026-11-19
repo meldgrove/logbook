@@ -1,3 +1,5 @@
+import { Button } from "@meldgrove/ui/button";
+import { Card, CardContent } from "@meldgrove/ui/card";
 import { History, Pencil } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -6,8 +8,6 @@ import { Addenda, EntryBadges, EntryFacts, Fact, SupersedeNotes } from "@/compon
 import { ProposalPage } from "@/components/proposals/proposal-page";
 import { Markdown } from "@/components/markdown";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { getFormatter, requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { canAddAddendum, canChangeImpact } from "@/lib/entries/commands";

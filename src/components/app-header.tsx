@@ -1,8 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Fragment } from "react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -10,22 +7,35 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { UpdateButton } from "@/components/updates/update-button";
+} from "@meldgrove/ui/breadcrumb";
+import { Separator } from "@meldgrove/ui/separator";
+import { SidebarTrigger } from "@meldgrove/ui/sidebar";
+import { UpdateButton } from "@meldgrove/ui/updates";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Fragment, useSyncExternalStore } from "react";
 import { breadcrumbsFor } from "@/lib/navigation";
-import type { DisplayPreferences } from "@/lib/preferences";
+
+const noSubscription = () => () => {};
+
+/** False on the server and while the page hydrates, true after. */
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  );
+}
 
 interface AppHeaderProps {
-  /** Admins see the update button. */
+  /** Admins see the update button (inside `LogbookUpdates`). */
   isAdmin: boolean;
-  preferences: DisplayPreferences;
 }
 
 /** The sidebar toggle, where the page sits in the app, and, for admins, the update button. */
-export function AppHeader({ isAdmin, preferences }: AppHeaderProps) {
+export function AppHeader({ isAdmin }: AppHeaderProps) {
   const crumbs = breadcrumbsFor(usePathname());
+  const hydrated = useHydrated();
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
       <SidebarTrigger className="-ml-1" />
@@ -54,7 +64,9 @@ export function AppHeader({ isAdmin, preferences }: AppHeaderProps) {
       ) : null}
       {isAdmin ? (
         <div className="ml-auto flex shrink-0 items-center">
-          <UpdateButton preferences={preferences} />
+          {/* Only after hydration: the button reads an installation this tab follows from
+              sessionStorage, which the server cannot see, so its server HTML would not match. */}
+          {hydrated ? <UpdateButton /> : null}
         </div>
       ) : null}
     </header>

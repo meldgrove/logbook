@@ -1,5 +1,29 @@
 "use client";
 
+import { Avatar, AvatarFallback } from "@meldgrove/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@meldgrove/ui/dropdown-menu";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  useSidebar,
+} from "@meldgrove/ui/sidebar";
 import {
   ChartColumn,
   ChevronsUpDown,
@@ -20,30 +44,6 @@ import { useRef, useState } from "react";
 import { signOutAction } from "@/app/actions";
 import { EntrySearch, SearchButton } from "@/components/entry-search";
 import { Logo } from "@/components/logo";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRail,
-  useSidebar,
-} from "@/components/ui/sidebar";
 import { activeNavKey, ADMIN_NAV, MAIN_NAV, NEW_ENTRY, type NavKey } from "@/lib/navigation";
 
 const ICONS: Record<NavKey, LucideIcon> = {

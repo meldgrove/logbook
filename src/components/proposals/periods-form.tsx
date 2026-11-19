@@ -1,10 +1,10 @@
 "use client";
 
+import { Button } from "@meldgrove/ui/button";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@meldgrove/ui/field";
+import { Input } from "@meldgrove/ui/input";
 import { savePeriodsAction } from "@/app/(app)/proposal-actions";
 import { useFormAction } from "@/components/form/use-form-action";
-import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import type { DefaultPeriods } from "@/lib/process/settings";
 
 const FIELDS = [

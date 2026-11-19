@@ -9,15 +9,21 @@ documentation is in `docs/`; contributor setup is in `CONTRIBUTING.md`.
 Next.js 16 (App Router, Server Actions, `src/proxy.ts`), Node.js 26, npm,
 strict TypeScript, PostgreSQL 18 with Drizzle ORM (`pg` driver), Better Auth
 with one OpenID Connect provider (PKCE), pg-boss worker, zod 4, Tailwind 4
-with shadcn/ui (Radix), pino, Vitest, Playwright.
+with `@meldgrove/ui` (the shared shadcn/ui components and theme of the
+Meldgrove apps, Radix), sonner, pino, Vitest, Playwright.
 
 ## Layout
 
 - `src/app/`: routes. Pages, Server Actions, and route handlers stay thin:
   check access, validate input with zod, call a module.
-- `src/components/ui/`: shadcn/ui components (new-york-v4), copied into the
-  repository; there is no `shadcn` package. Use them for every control, list,
-  and panel. The app shell (sidebar, header, breadcrumb) follows
+- `@meldgrove/ui`: the shadcn/ui components (`@meldgrove/ui/<name>`), `cn`
+  (`@meldgrove/ui/utils`), the theme (imported in `src/app/globals.css`), the
+  toaster (root layout), and the update button with the Updates card
+  (`@meldgrove/ui/updates`; `src/components/updates.tsx` connects them to
+  `/api/admin/updates`). Use them for every control, list, and panel. Change
+  or add components in the package, not here; `src/components/kbd.tsx`
+  (contrast) and `scroll-table.tsx` (a focusable scroll region) keep
+  Logbook's changes. The app shell (sidebar, header, breadcrumb) follows
   `src/lib/navigation.ts`.
 - `src/lib/<module>/`: `auth`, `directory` (manual and Keycloak directory),
   `db`, `entries`, `process`, `calendar`, `audit`, `health`, `jobs`,

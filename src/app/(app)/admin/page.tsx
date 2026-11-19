@@ -1,15 +1,14 @@
+import { Alert, AlertDescription } from "@meldgrove/ui/alert";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@meldgrove/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@meldgrove/ui/table";
+import { UpdatesSettings } from "@meldgrove/ui/updates";
 import { CircleAlert, Tags, Users, UsersRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PeriodsForm } from "@/components/proposals/periods-form";
-import { UpdatesSettings } from "@/components/updates/updates-settings";
 import { getFormatter, requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { getDirectory } from "@/lib/directory/directory";
@@ -17,9 +16,7 @@ import { getDirectoryStatus } from "@/lib/directory/queries";
 import { entryPath } from "@/lib/entries/refs";
 import { getNotificationStatus } from "@/lib/notifications/queries";
 import type { ChannelMode } from "@/lib/notifications/types";
-import { displayPreferences, type DisplayPreferences } from "@/lib/preferences";
 import { getDefaultPeriods } from "@/lib/process/settings";
-import { getUpdatesService } from "@/lib/updates/service";
 import { getWebhookStatus } from "@/lib/webhooks/queries";
 import { SyncNowForm } from "./sync-now-form";
 
@@ -28,7 +25,7 @@ export const metadata: Metadata = { title: "Admin" };
 const CHANNEL_LABELS = { slack: "Slack direct messages", slack_channel: "Slack channel", email: "Email" } as const;
 
 export default async function AdminPage() {
-  const { person } = await requireAdmin();
+  await requireAdmin();
   const fmt = await getFormatter();
   const sync = getDirectory().sync;
   const [status, periods, notifications, webhook] = await Promise.all([
@@ -375,19 +372,12 @@ export default async function AdminPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Suspense fallback={<p className="text-sm text-muted-foreground">Asking the update service…</p>}>
-            <UpdatesCardContent preferences={displayPreferences(person)} />
-          </Suspense>
+          {/* The status comes from the update button's provider in the layout. */}
+          <UpdatesSettings />
         </CardContent>
       </Card>
     </div>
   );
-}
-
-/** Up to 3 seconds when the update service is slow, so the rest of the page does not wait for it. */
-async function UpdatesCardContent({ preferences }: { preferences: DisplayPreferences }) {
-  const { body } = await getUpdatesService().status();
-  return <UpdatesSettings initial={body} preferences={preferences} />;
 }
 
 function Fact({ label, value }: { label: string; value: React.ReactNode }) {

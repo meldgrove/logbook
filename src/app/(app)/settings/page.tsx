@@ -1,7 +1,7 @@
+import { Card, CardContent } from "@meldgrove/ui/card";
 import type { Metadata } from "next";
 import { PreferencesForm } from "@/components/settings/preferences-form";
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent } from "@/components/ui/card";
 import { getFormatter, requireUser } from "@/lib/auth/session";
 import { DATE_FORMAT_LABELS, DATE_FORMATS, SERVER_TIME_ZONE, timeZoneOptions } from "@/lib/preferences";
 import { savePreferencesAction } from "./actions";

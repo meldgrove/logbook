@@ -1,10 +1,14 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { buttonState, parseUpdatesResponse, type ButtonState } from "@meldgrove/ui/updates/core";
 import { describe, expect, it } from "vitest";
-import { buttonState, type ButtonState } from "./state";
 import { createUpdaterClient } from "./updater-client";
 
-/* Answers captured from Meldgrove Updater 0.2 (tests/fixtures/updater-0.2), as the API sends them. */
+/*
+ * Answers captured from Meldgrove Updater 0.2 (tests/fixtures/updater-0.2), as
+ * the API sends them, through the updater client and the update button of
+ * @meldgrove/ui.
+ */
 
 const FIXTURES = path.resolve(import.meta.dirname, "../../../tests/fixtures/updater-0.2");
 const samples = readdirSync(FIXTURES).filter((name) => name.endsWith(".json"));
@@ -37,11 +41,11 @@ describe("the updater client", () => {
   });
 });
 
-describe("buttonState of the samples", () => {
+describe("the update button with the samples", () => {
   it.each([
     ["status-off-available-attention.json", "available"],
     ["status-host-available.json", "available"],
-    ["status-platform-locked.json", "up-to-date"],
+    ["status-platform-locked.json", "current"],
     ["status-installing.json", "installing"],
     ["status-failed.json", "failed"],
     ["status-preview.json", "failed"],
@@ -49,7 +53,11 @@ describe("buttonState of the samples", () => {
   ] satisfies [string, ButtonState][])("%s is %s", async (name, expected) => {
     const result = await clientAnswering(name).status();
     if (result.kind !== "ok") throw new Error(`${name} was not taken as a status`);
-    const response = { app: { version: result.status.installed }, reachable: true, updater: result.status, error: null };
-    expect(buttonState(response, { checking: false, pending: null })).toBe(expected);
+    // What GET /api/admin/updates answers (service.ts), as the button reads it.
+    const response = parseUpdatesResponse(
+      JSON.parse(JSON.stringify({ app: { version: result.status.installed }, reachable: true, updater: result.status, error: null })),
+    );
+    expect(response).not.toBeNull();
+    expect(buttonState(response!, { checking: false, pending: null })).toBe(expected);
   });
 });
