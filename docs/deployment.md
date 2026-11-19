@@ -7,9 +7,11 @@ every later release of the series; from 1.0.0 the series is the major
 version, `1`); `latest` is the newest release. A release that needs manual
 steps starts a new series, so the releases within a series install without
 anyone acting. Release candidates (`0.2.0-rc.1`) are for testing and get only
-their own tag. Run a fixed version and upgrade on purpose, or let the updater
-install new releases ([automatic updates](#automatic-updates)). The image's
-command selects the process:
+their own tag. Previews (`0.2.1-preview.3`, and `preview` for the newest)
+are built from every change on `main` once its checks pass. Run a fixed
+version and upgrade on purpose, or let the updater install new versions
+([automatic updates](#automatic-updates)). The image's command selects the
+process:
 
 | Command | What it does |
 |---|---|
@@ -131,8 +133,9 @@ run the commands as root (`sudo -i`).
    ([identity and access](identity-and-access.md#openid-connect-login)).
 4. **Create `.env`** from `.env.example` (`cp .env.example .env`,
    `chmod 600 .env`) and set the production values
-   ([configuration](configuration.md)): `LOGBOOK_VERSION` (a series such as
-   `0.2`), `LOGBOOK_BASE_URL`, `DATABASE_URL`, a new `BETTER_AUTH_SECRET`
+   ([configuration](configuration.md)): `LOGBOOK_VERSION` (the newest
+   release, such as `0.2.0`; the updater keeps it current), `LOGBOOK_BASE_URL`,
+   `DATABASE_URL`, a new `BETTER_AUTH_SECRET`
    (`openssl rand -base64 32`), the `OIDC_*` variables, and `DIRECTORY` with
    its settings. Remove `NOTIFICATION_TRANSPORT` (production sends for real).
 
@@ -188,8 +191,8 @@ admin page shows the worker's last heartbeat.
   including the `pgboss` schema.
 - **Logs** are JSON lines on stdout. The `service` field names the process.
 - **Admin page** (`/admin`): directory sync status, notification channels and
-  failures, webhook deliveries, and the default periods of the decision
-  process.
+  failures, webhook deliveries, the default periods of the decision
+  process, and [updates](#automatic-updates).
 - **Upgrades**: read the release notes of every release since yours and
   take their steps. Back up the database first: migrations only move
   forward. `migrate` applies new migrations before `web` and `worker` start.
@@ -197,37 +200,56 @@ admin page shows the worker's last heartbeat.
     environment variables and redeploy. Coolify reads `compose.yaml` from
     `stable`, which is at the newest release.
   - **Debian:** in `/srv/logbook`, run `git pull` (the newest release's
-    `compose.yaml`), set `LOGBOOK_VERSION` in `.env`, and run
-    `docker compose up -d --pull always`.
+    `compose.yaml`), then install the release with the
+    [update button](#the-update-button), or set `LOGBOOK_VERSION` in `.env`
+    and run `docker compose up -d --pull always`.
 
 ## Automatic updates
 
 `compose.yaml` includes the `updater` service of
 [Meldgrove Updater](https://github.com/meldgrove/updater). Once an hour it
-checks whether the tag in `LOGBOOK_VERSION` points to a new image. If so, it
-calls Coolify's deploy link or asks the server, which pulls the image and
-restarts Logbook, `migrate` first. Until it is set up
-[on Coolify](#on-coolify) or [on Debian](#on-debian), it does nothing.
+checks for new versions of Logbook and installs them: on a Debian server
+through the server, which pulls the image and restarts Logbook, `migrate`
+first; on Coolify through its deploy link. Until it is set up
+[on Debian](#on-debian) or [on Coolify](#on-coolify), it installs nothing,
+but admins still see new versions.
 
-The tag in `LOGBOOK_VERSION` decides what installs:
+Admins choose the channel on the admin page, under **Updates**:
 
-- a series such as `0.2` (from 1.0.0 the major version, such as `1`): every
-  release of that series, with its features and fixes. None of them needs
-  manual steps. A release that does starts the next series: the `updater`
-  log then names it, and moving to it is an [upgrade](#operations) by hand;
-- `latest`: every release. A release with upgrade steps then installs before
-  anyone has taken them; watch the releases on GitHub (Watch → Custom →
-  Releases) and take the steps right away.
+- **Stable** (default): releases. A release of the installed series (such as
+  `0.2`; from 1.0.0 the major version, such as `1`) needs no manual steps and
+  installs automatically. A release that needs upgrade steps starts the next
+  series: Logbook shows it, but it never installs on its own. Take its steps,
+  then install it with the [update button](#the-update-button).
+- **Preview**: every change on `main` as soon as its checks pass, before it
+  is released, and every release. Previews install within the hour. New
+  features first, and now and then a new bug; previews have no release
+  notes. Switching back to Stable installs nothing and never goes back to an
+  older version: Logbook keeps the preview until a release is newer.
 
 Schedule database backups first: migrations run without anyone watching.
 
 A release installs three days after it came out, so that a faulty one can be
 replaced before it reaches the server. `UPDATE_COOLDOWN` changes the time:
 `0` installs within the hour, `7d` waits a week. Security fixes wait as well;
-deploy by hand to install a release at once. A deployment stops Logbook for
-a moment: `UPDATE_WINDOW`, such as `02:00-05:00` in the time zone `TZ`,
-keeps that out of working hours. After the first automatic update, check
-that it arrived: `/-/healthz` reports the version.
+install a release at once with the update button. A deployment stops
+Logbook for a moment: `UPDATE_WINDOW`, such as `02:00-05:00` in the time
+zone `TZ`, keeps automatic installations out of working hours.
+
+### The update button
+
+Admins see an update button at the top right of every page. A click checks
+for updates; a dot means a new version is available. Its popover lists the
+changes, links to the release notes, says when the version installs
+automatically, and installs it at once with **Install now**. The page
+reloads when Logbook is back with the new version. When an installation
+fails, the button shows why; on a Debian server, a version that does not
+become healthy is replaced by the one before.
+
+The **Updates** card on the admin page shows the installed version, the
+channel, and whether updates install automatically. The button and the card
+ask the updater at `UPDATER_URL` ([configuration](configuration.md#updates));
+without one, they say that there is no update service.
 
 ### On Coolify
 
@@ -238,7 +260,13 @@ that it arrived: `/-/healthz` reports the version.
 4. In the resource's environment variables, set `UPDATE_DEPLOY_HOOK_URL` to
    the webhook and `UPDATE_DEPLOY_HOOK_TOKEN` to the token, then redeploy.
 
-The `updater` log then names the tag it watches.
+On Coolify, the image tag in `LOGBOOK_VERSION` decides what installs, not
+the channel in Logbook: a series such as `0.2` installs the releases of that
+series, `latest` every release (also those with upgrade steps: watch the
+releases on GitHub with Watch → Custom → Releases, and take their steps right
+away), and `preview` every preview and release. When the tag points to a new
+image, the updater calls the deploy link, and Coolify pulls the image and
+restarts Logbook. The `updater` log names the tag it watches.
 
 ### On Debian
 
@@ -250,13 +278,28 @@ docker compose run --rm -T --pull always updater host-setup > updater-setup.sh
 sh updater-setup.sh
 ```
 
-The first command starts the image the tag points to now, which the updater
+The first command starts the version in `LOGBOOK_VERSION`, which the updater
 takes as installed. The second writes the setup script from the updater's
 image; read it before you run it. The script installs a systemd unit that
-waits for the updater's request, then pulls the new image and runs
-`docker compose up -d`, `migrate` first. `docker compose logs updater` names
-the tag it watches, and `journalctl -u meldgrove-updater-logbook.service`
-shows each installation. `sh updater-setup.sh remove` switches it off.
+waits for the updater's requests. For each, it writes the version into
+`LOGBOOK_VERSION` in `.env`, pulls the image, and runs
+`docker compose up -d --wait`, `migrate` first. When Logbook does not become
+healthy, it restores `.env` and starts the version before.
+`journalctl -u meldgrove-updater-logbook.service` shows each installation;
+`sh updater-setup.sh remove` switches it off.
+
+The script installs images, not files: when a release changes
+`compose.yaml`, its release notes say so, and `git pull` takes the new file.
+
+Installations set up before the update button get it, and the channels, with
+the newest `compose.yaml` and the host setup again:
+
+```sh
+cd /srv/logbook
+git pull
+docker compose up -d
+docker compose run --rm -T --pull always updater host-setup > updater-setup.sh && sudo sh updater-setup.sh
+```
 
 ## Importing old entries from a CSV file
 
