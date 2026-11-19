@@ -111,6 +111,19 @@ describe("updates service", () => {
     expect(requests.map((r) => r.path)).toEqual(["/v1/install", "/v1/status"]);
   });
 
+  it("passes a 5xx answer to an install request through, with the error and the latest status", async () => {
+    handler = (request, _body, response) =>
+      request.url === "/v1/install" ? json(response, 503, { error: "The deploy trigger is busy." }) : json(response, 200, STATUS);
+    expect(await service().install("0.2.1")).toEqual({
+      httpStatus: 503,
+      body: { app: { version: "0.2.0" }, reachable: true, updater: STATUS, error: "The deploy trigger is busy." },
+    });
+    handler = (_request, _body, response) => json(response, 500, {});
+    expect(await service().install("0.2.1")).toMatchObject({ httpStatus: 500, body: { error: "The update service answered HTTP 500." } });
+    // A check or a channel change was refused: 409 with the error.
+    expect((await service().check()).httpStatus).toBe(409);
+  });
+
   it("answers 409 for a locked channel and an error answer without a message", async () => {
     handler = (request, _body, response) =>
       request.url === "/v1/channel" ? json(response, 409, { error: "The platform's image tag decides." }) : json(response, 500, {});

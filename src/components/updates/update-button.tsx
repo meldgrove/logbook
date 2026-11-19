@@ -23,14 +23,17 @@ import {
   buttonLabel,
   buttonState,
   CHANNEL_LABELS,
+  checkError,
   failure,
-  followInstall,
+  failureNote,
   hasPopover,
-  INSTALL_PATIENCE_MS,
   installAction,
   installedVersion,
   installsAtText,
+  isOverdue,
   moreChanges,
+  newAttempt,
+  RECONCILE_MS,
   stageLabel,
   timeAgo,
   type ButtonState,
@@ -38,21 +41,20 @@ import {
 } from "@/lib/updates/state";
 import type { Update, UpdaterStatus, UpdatesResponse } from "@/lib/updates/types";
 import { cn } from "@/lib/utils";
+import { followPending } from "./follow-install";
 import {
   currentUpdates,
+  pollUpdates,
   receiveUpdates,
   requestUpdates,
   setUpdates,
   stopWaiting,
   useUpdates,
   type UpdatesRequestResult,
-  type UpdatesSnapshot,
 } from "./updates-store";
 
 const POLL_MS = 5 * 60_000;
 const FOCUS_POLL_MS = 60_000;
-const INSTALL_POLL_MS = 2_000;
-const SLOW_INSTALL_POLL_MS = 30_000;
 const NOTES_SHOWN = 8;
 
 const ERROR_TOAST_MS = 8_000;
@@ -81,7 +83,7 @@ interface Confirmation {
  * Logbook is back with the new version.
  */
 export function UpdateButton({ preferences }: { preferences: DisplayPreferences }) {
-  const { response, pending, offline, at, followed } = useUpdates();
+  const { response, pending, offline, at, followed, signedOut } = useUpdates();
   const [checking, setChecking] = useState(false);
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -127,12 +129,12 @@ export function UpdateButton({ preferences }: { preferences: DisplayPreferences 
 
   const load = useCallback(async () => {
     lastLoad.current = Date.now();
-    const result = await requestUpdates("status");
-    if (result.kind === "answer") receiveUpdates(result.body);
+    await pollUpdates();
   }, []);
 
-  // On page load, every 5 minutes, and when the window regains focus (at most once a minute).
+  // On page load, every 5 minutes, and when the window regains focus (at most once a minute); never after the session ended.
   useEffect(() => {
+    if (signedOut) return;
     void load();
     const interval = setInterval(() => void load(), POLL_MS);
     const onFocus = () => {
@@ -143,72 +145,57 @@ export function UpdateButton({ preferences }: { preferences: DisplayPreferences 
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
-  }, [load]);
+  }, [load, signedOut]);
 
-  // While an installation runs: every 2 seconds, through the restart.
-  const waitingFor = pending?.version;
+  // While an installation runs: every 2 seconds, through the restart (follow-install.ts).
+  const following = pending ? `${pending.version}@${pending.startedAt}` : null;
   useEffect(() => {
-    if (!waitingFor) return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = async () => {
-      const result = await requestUpdates("status");
-      if (stopped) return;
-      const current = currentUpdates().pending;
-      if (current?.version !== waitingFor) return;
-      const step = followInstall(current, result, Date.now());
-      // Shows the answer, if any, with the change.
-      const show = (change: Partial<UpdatesSnapshot>) =>
-        result.kind === "answer" ? receiveUpdates(result.body, change) : setUpdates(change);
-      switch (step.kind) {
+    if (!following) return;
+    return followPending((end) => {
+      switch (end.kind) {
         case "done":
-          show({ pending: null, offline: false });
-          setToast({ id: Date.now(), text: `Updated to ${current.version}`, error: false });
+          setToast({ id: Date.now(), text: `Updated to ${end.version}`, error: false });
           later(() => window.location.reload(), RELOAD_DELAY_MS);
           return;
         case "failed":
-          show({ pending: null, offline: false, followed: current });
           setOpen(true);
           return;
         case "not-started":
-          show({ pending: null, offline: false });
-          showError(`The installation did not start. ${step.reason}`);
+          showError(`The installation did not start. ${end.reason}`);
+          return;
+        case "unconfirmed":
+          showError(`The installation could not be confirmed. ${end.error}`);
           return;
         case "signed-out":
           // The attempt stays for the next page load, which signs in again.
           showError("Your session ended. Reload the page and sign in to see how the update went.");
           return;
-        case "wait":
-          show({ pending: step.pending, offline: step.offline });
       }
-      const slow = Date.now() - current.startedAt > INSTALL_PATIENCE_MS;
-      timer = setTimeout(tick, slow ? SLOW_INSTALL_POLL_MS : INSTALL_POLL_MS);
-    };
-    timer = setTimeout(tick, INSTALL_POLL_MS);
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [waitingFor, later, showError]);
+    });
+  }, [following, later, showError]);
 
   async function check() {
     setChecking(true);
     const result = await requestUpdates("check");
     setChecking(false);
-    if (result.kind !== "answer") return showError(requestError(result));
+    if (result.kind !== "answer") {
+      if (result.kind === "signed-out") setUpdates({ signedOut: true });
+      return showError(requestError(result));
+    }
     receiveUpdates(result.body);
-    const failed = result.body.error ?? (result.body.updater?.error ? `The check failed: ${result.body.updater.error}` : null);
+    const failed = checkError(result.body);
     if (failed) showError(failed);
     else if (hasPopover(buttonState(result.body, { checking: false, pending: null }))) setOpen(true);
   }
 
   async function install({ version }: Confirmation) {
     setConfirmation(null);
-    // Remembered before the request: its answer may not arrive although the installation starts.
-    const attempt: PendingInstall = { version, startedAt: Date.now(), confirmed: false, sawOutage: false, reason: null };
+    // Remembered before the request, with the earlier result: its answer may not arrive although the installation starts.
+    const attempt = newAttempt(version, Date.now(), currentUpdates().response);
     setUpdates({ pending: attempt, followed: null, offline: false });
     setOpen(true);
-    const result = await requestUpdates("install", { version });
+    // At most the time the attempt waits for the status to report it.
+    const result = await requestUpdates("install", { version }, { timeoutMs: RECONCILE_MS });
     const current = currentUpdates().pending;
     const body = result.kind === "answer" ? result.body : null;
     if (current?.version !== attempt.version || current.startedAt !== attempt.startedAt) {
@@ -379,13 +366,14 @@ function PopoverBody({ state, response, pending, followed, offline, now, formatD
   const status = response.updater;
   if (state === "installing") {
     const version = pending?.version ?? status?.installing?.version ?? "";
-    const slow = pending ? now - pending.startedAt > INSTALL_PATIENCE_MS : false;
+    const slow = pending ? isOverdue(pending, now) : false;
     const stage = offline ? "Restarting…" : status?.installing ? stageLabel(status.installing.stage, status.installed) : null;
     return (
       <div className="flex flex-col gap-1">
         <PopoverTitle>Installing {version}…</PopoverTitle>
         {stage ? <p className="text-muted-foreground">{stage}</p> : null}
-        <p>Logbook restarts. This page reloads when it is back.</p>
+        {/* Only an active wait reloads the page. */}
+        <p>{pending ? "Logbook restarts. This page reloads when it is back." : "Logbook restarts."}</p>
         {slow ? (
           <>
             <p className="text-destructive">
@@ -419,6 +407,9 @@ function PopoverBody({ state, response, pending, followed, offline, now, formatD
       </div>
     );
   }
+  // A newer offer keeps the failure of a version that is no longer offered as a line.
+  const note = failureNote(status, followed);
+  const noteLine = note ? <p className="break-words text-destructive">{note}</p> : null;
   if (state === "attention" && status.attention) {
     const update = status.attention;
     return (
@@ -429,6 +420,7 @@ function PopoverBody({ state, response, pending, followed, offline, now, formatD
             This release changes the setup. Take the upgrade steps from its release notes on the server first.
           </p>
         </div>
+        {noteLine}
         <NotesLink update={update} />
         <InstallAction status={status} update={update} onInstall={onInstall} />
       </div>
@@ -451,6 +443,7 @@ function PopoverBody({ state, response, pending, followed, offline, now, formatD
             {update.preview ? <Badge variant="outline">Preview</Badge> : null}
           </p>
         </div>
+        {noteLine}
         {notes.length > 0 ? (
           <div className="flex flex-col gap-1">
             <ul className="flex list-disc flex-col gap-1 pl-5">

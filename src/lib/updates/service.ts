@@ -7,6 +7,8 @@ import type { Channel, UpdatesResponse } from "./types";
  *
  * - the updater's status: 200 (202 after an install request);
  * - an error answer of the updater: 409 with `error` and the latest status;
+ *   a 5xx answer to an install request stays a 5xx, since the installation
+ *   may have started (the button waits for the status to report it);
  * - no updater at UPDATER_URL, or UPDATER_URL empty: 200 with
  *   `reachable: false`.
  */
@@ -32,7 +34,7 @@ export function createUpdatesService(options: { client: UpdaterClient | null; ap
     body: { app, reachable: false, updater: null, error },
   });
 
-  async function reply(result: UpdaterCallResult): Promise<UpdatesReply> {
+  async function reply(result: UpdaterCallResult, passServerErrors: boolean): Promise<UpdatesReply> {
     switch (result.kind) {
       case "ok":
         return { httpStatus: result.httpStatus, body: { app, reachable: true, updater: result.status, error: null } };
@@ -42,7 +44,7 @@ export function createUpdatesService(options: { client: UpdaterClient | null; ap
         // The updater refused (e.g. the version is no longer offered): show why, with its latest status.
         const latest = await client!.status();
         return {
-          httpStatus: 409,
+          httpStatus: passServerErrors && result.httpStatus >= 500 ? result.httpStatus : 409,
           body: { app, reachable: true, updater: latest.kind === "ok" ? latest.status : null, error: result.error },
         };
       }
@@ -51,8 +53,8 @@ export function createUpdatesService(options: { client: UpdaterClient | null; ap
 
   const off = () => unreachable("UPDATER_URL is empty, so the update service is off.");
 
-  async function run(call: (client: UpdaterClient) => Promise<UpdaterCallResult>): Promise<UpdatesReply> {
-    return client ? reply(await call(client)) : off();
+  async function run(call: (client: UpdaterClient) => Promise<UpdaterCallResult>, passServerErrors = false): Promise<UpdatesReply> {
+    return client ? reply(await call(client), passServerErrors) : off();
   }
 
   return {
@@ -60,10 +62,10 @@ export function createUpdatesService(options: { client: UpdaterClient | null; ap
       if (!client) return off();
       const result = await client.status();
       // The status never fails on a working updater; an error answer means another service answers there.
-      return result.kind === "refused" ? unreachable(result.error) : reply(result);
+      return result.kind === "refused" ? unreachable(result.error) : reply(result, false);
     },
     check: () => run((c) => c.check()),
-    install: (version) => run((c) => c.install(version)),
+    install: (version) => run((c) => c.install(version), true),
     channel: (channel) => run((c) => c.channel(channel)),
   };
 }

@@ -95,6 +95,14 @@ describe("/api/admin/updates", () => {
     expect(mocks.service.install).toHaveBeenLastCalledWith("sha256:0123456789ab");
   });
 
+  it("passes a 5xx of the install request through, never as 409", async () => {
+    const failed = { ...ANSWER, error: "The update service answered HTTP 503." };
+    mocks.service.install.mockResolvedValue({ httpStatus: 503, body: failed });
+    const response = await install(post("/install", { version: "0.2.1" }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(failed);
+  });
+
   it.each([
     ["another site", "https://evil.example"],
     ["no Origin header", null],

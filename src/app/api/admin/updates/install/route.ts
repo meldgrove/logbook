@@ -2,7 +2,7 @@ import { errorResponse, readBody, refuseUnlessAdmin, updatesResponse } from "@/l
 import { getUpdatesService } from "@/lib/updates/service";
 import { installRequestSchema } from "@/lib/updates/types";
 
-// Asks the updater to install an offered version: 202 when it starts. Admins only.
+// Asks the updater to install an offered version: 202 when it starts; a 5xx of the updater stays a 5xx. Admins only.
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request): Promise<Response> {

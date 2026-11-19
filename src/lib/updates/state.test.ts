@@ -5,15 +5,22 @@ import {
   automaticText,
   buttonLabel,
   buttonState,
+  checkError,
   durationText,
   failure,
+  failureNote,
   followInstall,
   hasPopover,
+  ignoreInstall,
   installAction,
-  installKey,
   installOutcome,
   installsAtText,
+  isIgnored,
+  isOverdue,
   moreChanges,
+  newAttempt,
+  reconcileDeadline,
+  reconcileEnd,
   stableHelp,
   stageLabel,
   timeAgo,
@@ -59,9 +66,12 @@ const idle = { checking: false, pending: null };
 const pending: PendingInstall = {
   version: "0.2.1",
   startedAt: Date.parse("2026-11-19T09:00:00Z"),
+  installingSince: null,
+  earlier: null,
   confirmed: true,
   sawOutage: false,
   reason: null,
+  lastError: null,
 };
 const rolledBack = {
   version: "0.2.1",
@@ -196,6 +206,21 @@ describe("failure", () => {
     expect(buttonState(stale, { checking: false, pending: null, followed: pending })).toBe("available");
   });
 
+  it("gives way to a newer offer, which keeps the failure as a line", () => {
+    const newer = answer({ available: { ...update, version: "0.2.2" }, last: rolledBack });
+    expect(buttonState(newer, { checking: false, pending: null, followed: pending })).toBe("available");
+    expect(failureNote(newer.updater!, pending)).toBe(`0.2.1 failed: ${rolledBack.message}`);
+    const attention = answer({ attention: { ...update, version: "0.3.0" }, last: rolledBack });
+    expect(buttonState(attention, { checking: false, pending: null, followed: pending })).toBe("attention");
+    expect(failureNote(attention.updater!, pending)).toBe(`0.2.1 failed: ${rolledBack.message}`);
+    // While the failed version is still offered, the failure shows with Try again, and no line.
+    const same = answer({ available: update, last: rolledBack });
+    expect(buttonState(same, { checking: false, pending: null, followed: pending })).toBe("failed");
+    expect(failureNote(same.updater!, pending)).toBeNull();
+    // Without any offer, the failure itself shows.
+    expect(buttonState(answer({ last: rolledBack }), { checking: false, pending: null, followed: pending })).toBe("failed");
+  });
+
   it("takes the message of the offer when the result has none", () => {
     const offered = answer({ available: { ...update, failed: "unhealthy" }, last: { ...rolledBack, message: null } });
     expect(failure(offered.updater!)?.message).toBe("unhealthy");
@@ -224,25 +249,44 @@ describe("installAction", () => {
 
 describe("the install request", () => {
   const now = Date.parse("2026-11-19T09:00:05Z");
-  const attempt: PendingInstall = { ...pending, confirmed: false };
+  const attempt: PendingInstall = { ...pending, confirmed: false, lastError: "Logbook did not answer." };
   const otherInstalling = { version: "0.2.2", startedAt: "2026-11-19T08:59:00Z", manual: false, stage: "pulling" };
 
-  it("follows the installation after 202", () => {
+  it("remembers the attempt with the earlier result before the request", () => {
+    const earlier = { ...rolledBack, finishedAt: "2026-11-19T08:30:00Z" };
+    expect(newAttempt("0.2.1", pending.startedAt, answer({ last: earlier }))).toEqual({
+      ...pending,
+      confirmed: false,
+      earlier,
+      lastError: "Logbook did not answer.",
+    });
+    expect(newAttempt("0.2.1", pending.startedAt, null).earlier).toBeNull();
+  });
+
+  it("follows the installation after 202, also when its body cannot be read", () => {
     const result = afterInstallRequest(attempt, { kind: "answer", httpStatus: 202, body: answer() }, now);
     expect(result).toEqual({ pending: { ...attempt, confirmed: true }, error: null });
+    const broken = { kind: "outage" as const, httpStatus: 202, message: "Logbook's answer could not be read." };
+    expect(afterInstallRequest(attempt, broken, now)).toEqual({ pending: { ...attempt, confirmed: true }, error: null });
   });
 
   it("keeps the attempt when the answer is unclear", () => {
     const timeout = "The update service at http://updater:8080 did not answer within 10 seconds.";
     const unreachable = { app: { version: "0.2.0" }, reachable: false, updater: null, error: timeout };
     expect(afterInstallRequest(attempt, { kind: "answer", httpStatus: 200, body: unreachable }, now)).toEqual({
-      pending: { ...attempt, reason: timeout },
+      pending: { ...attempt, reason: timeout, lastError: timeout },
       error: null,
     });
-    expect(afterInstallRequest(attempt, { kind: "outage" }, now)).toEqual({
-      pending: { ...attempt, reason: "Logbook could not be reached." },
-      error: null,
-    });
+    for (const [httpStatus, message] of [
+      [null, "Logbook could not be reached."],
+      [503, "The update service answered HTTP 503."],
+      [200, "Logbook's answer could not be read."],
+    ] as const) {
+      expect(afterInstallRequest(attempt, { kind: "outage", httpStatus, message }, now)).toEqual({
+        pending: { ...attempt, reason: message, lastError: message },
+        error: null,
+      });
+    }
   });
 
   it("forgets the attempt when the updater or Logbook refuses it", () => {
@@ -251,13 +295,26 @@ describe("the install request", () => {
       pending: null,
       error: "0.2.1 is not offered.",
     });
-    expect(afterInstallRequest(attempt, { kind: "error", message: "Send a version." }, now)).toEqual({ pending: null, error: "Send a version." });
+    const badRequest = { kind: "error" as const, httpStatus: 400, message: "Send a version." };
+    expect(afterInstallRequest(attempt, badRequest, now)).toEqual({ pending: null, error: "Send a version." });
+    // A 4xx refuses even when its body cannot be read.
+    const unreadable = { kind: "error" as const, httpStatus: 429, message: "Logbook answered HTTP 429." };
+    expect(afterInstallRequest(attempt, unreadable, now)).toEqual({ pending: null, error: "Logbook answered HTTP 429." });
   });
 
   it("follows the installation a refusal reports instead", () => {
     const busy = { ...answer({ installing: otherInstalling }), error: "0.2.2 is being installed." };
     expect(afterInstallRequest(attempt, { kind: "answer", httpStatus: 409, body: busy }, now)).toEqual({
-      pending: { version: "0.2.2", startedAt: Date.parse(otherInstalling.startedAt), confirmed: true, sawOutage: false, reason: null },
+      pending: {
+        version: "0.2.2",
+        startedAt: Date.parse(otherInstalling.startedAt),
+        installingSince: otherInstalling.startedAt,
+        earlier: null,
+        confirmed: true,
+        sawOutage: false,
+        reason: null,
+        lastError: null,
+      },
       error: null,
     });
   });
@@ -269,47 +326,118 @@ describe("the install request", () => {
 });
 
 describe("followInstall", () => {
-  const attempt: PendingInstall = { ...pending, confirmed: false, reason: "Logbook could not be reached." };
+  const attempt: PendingInstall = { ...pending, confirmed: false, reason: "Logbook could not be reached.", lastError: "Logbook could not be reached." };
   const installing = { version: "0.2.1", startedAt: "2026-11-19T09:00:01Z", manual: true, stage: "pulling" };
-  const soon = pending.startedAt + 10_000;
-  const later = pending.startedAt + 61_000;
+  const ok = (response: UpdatesResponse) => ({ kind: "answer" as const, httpStatus: 200, body: response });
+  const down = { kind: "outage" as const, httpStatus: null, message: "Logbook could not be reached." };
 
-  it("confirms an unclear attempt once the status reports it", () => {
-    expect(followInstall(attempt, { kind: "answer", httpStatus: 200, body: answer({ installing }) }, soon)).toEqual({
+  it("confirms an unclear attempt once the status reports it, with the installation's identity", () => {
+    expect(followInstall(attempt, ok(answer({ installing })))).toEqual({
       kind: "wait",
-      pending: { ...attempt, confirmed: true },
+      pending: { ...attempt, confirmed: true, installingSince: installing.startedAt, lastError: null },
       offline: false,
     });
-    expect(followInstall(attempt, { kind: "answer", httpStatus: 200, body: answer({ last: rolledBack }) }, later)).toEqual({ kind: "failed" });
+    expect(followInstall(attempt, ok(answer({ last: rolledBack })))).toMatchObject({ kind: "failed" });
   });
 
-  it("gives an unclear attempt a minute to show up, also through outages", () => {
-    expect(followInstall(attempt, { kind: "answer", httpStatus: 200, body: answer() }, soon)).toMatchObject({ kind: "wait", offline: false });
-    expect(followInstall(attempt, { kind: "outage" }, later)).toMatchObject({ kind: "wait", offline: true });
-    expect(followInstall(attempt, { kind: "answer", httpStatus: 200, body: answer() }, later)).toEqual({
-      kind: "not-started",
-      reason: "Logbook could not be reached.",
+  it("takes a result of the same second as the attempt's start as fresh", () => {
+    // The attempt started at 09:00:00.700; the updater writes whole seconds.
+    const sameSecond = { ...attempt, startedAt: Date.parse("2026-11-19T09:00:00.700Z") };
+    const accepted = { version: "0.2.1", result: "accepted" as const, message: null, finishedAt: "2026-11-19T09:00:00Z" };
+    expect(followInstall(sameSecond, ok(answer({ last: accepted })))).toMatchObject({ kind: "wait", pending: { confirmed: true } });
+    expect(followInstall(sameSecond, ok(answer({ last: accepted }, "0.2.1")))).toMatchObject({ kind: "done" });
+    const failed = { ...rolledBack, finishedAt: "2026-11-19T09:00:00Z" };
+    expect(followInstall(sameSecond, ok(answer({ last: failed })))).toMatchObject({ kind: "failed" });
+  });
+
+  it("does not take the earlier result as the result of a retry in the same second", () => {
+    const earlier = { ...rolledBack, finishedAt: "2026-11-19T09:00:00Z" };
+    const retry = newAttempt("0.2.1", Date.parse("2026-11-19T09:00:00.900Z"), answer({ available: update, last: earlier }));
+    const step = followInstall(retry, ok(answer({ available: update, last: earlier })));
+    expect(step).toMatchObject({ kind: "wait", pending: { confirmed: false, lastError: null } });
+    expect(failure(answer({ last: earlier }).updater!, retry)).toBeNull();
+    // A new result of the retry counts, also in the same second.
+    const again = { ...earlier, message: "container web is unhealthy again.", result: "failed" as const };
+    expect(followInstall(retry, ok(answer({ last: again })))).toMatchObject({ kind: "failed" });
+  });
+
+  it("counts results from the updater's start of the installation once it reported one", () => {
+    const seen = { ...pending, startedAt: Date.parse("2026-11-19T09:00:03Z"), installingSince: "2026-11-19T09:00:01Z" };
+    const installed = { version: "0.2.1", result: "installed" as const, message: null, finishedAt: "2026-11-19T09:00:02Z" };
+    expect(followInstall(seen, ok(answer({ last: installed })))).toMatchObject({ kind: "done" });
+    expect(followInstall(seen, ok(answer({ last: { ...installed, finishedAt: "2026-11-19T09:00:00Z" } })))).toMatchObject({
+      kind: "wait",
     });
-    const stale = answer({ last: { ...rolledBack, finishedAt: "2026-11-19T08:59:00Z" } });
-    expect(followInstall(attempt, { kind: "answer", httpStatus: 200, body: stale }, later)).toMatchObject({ kind: "not-started" });
   });
 
-  it("expects outages while Logbook restarts", () => {
+  it("records every answer without a status as an outage, and a reachable status clears the error", () => {
     const noUpdater = { app: { version: "0.2.0" }, reachable: false, updater: null, error: "ENOTFOUND" };
-    for (const result of [{ kind: "outage" as const }, { kind: "answer" as const, httpStatus: 200, body: noUpdater }]) {
-      expect(followInstall(pending, result, soon)).toEqual({ kind: "wait", pending: { ...pending, sawOutage: true }, offline: true });
-    }
+    expect(followInstall(pending, down)).toEqual({
+      kind: "wait",
+      pending: { ...pending, sawOutage: true, lastError: "Logbook could not be reached." },
+      offline: true,
+    });
+    expect(followInstall(pending, ok(noUpdater))).toEqual({
+      kind: "wait",
+      pending: { ...pending, sawOutage: true, lastError: "ENOTFOUND" },
+      offline: true,
+    });
+    const bad = { kind: "outage" as const, httpStatus: 502, message: "Logbook answered HTTP 502." };
+    expect(followInstall(attempt, bad)).toMatchObject({ pending: { sawOutage: true, lastError: "Logbook answered HTTP 502." } });
+    expect(followInstall(attempt, ok(answer()))).toEqual({ kind: "wait", pending: { ...attempt, lastError: null }, offline: false });
+  });
+
+  it("completes a platform's deployment without an app version after reachable: false and a reachable answer", () => {
+    const accepted = { version: "0.2.1", result: "accepted" as const, message: null, finishedAt: "2026-11-19T09:00:01Z" };
+    const noUpdater = { app: { version: null }, reachable: false, updater: null, error: "ECONNREFUSED" };
+    const first = followInstall(pending, ok(answer({ last: accepted }, null)));
+    expect(first).toMatchObject({ kind: "wait", pending: { sawOutage: false } });
+    const outage = followInstall(first.kind === "wait" ? first.pending : pending, ok(noUpdater));
+    expect(outage).toMatchObject({ kind: "wait", offline: true, pending: { sawOutage: true } });
+    const back = followInstall(outage.kind === "wait" ? outage.pending : pending, ok(answer({ last: accepted }, null)));
+    expect(back).toMatchObject({ kind: "done" });
   });
 
   it("stops polling when the session ended", () => {
-    expect(followInstall(pending, { kind: "signed-out", message: "Not found." }, soon)).toEqual({ kind: "signed-out" });
+    expect(followInstall(pending, { kind: "signed-out", message: "Not found." })).toEqual({ kind: "signed-out" });
   });
 
   it("follows the precedence of installOutcome once confirmed", () => {
-    expect(followInstall(pending, { kind: "answer", httpStatus: 200, body: answer({ installing }, "0.2.1") }, soon)).toMatchObject({
-      kind: "wait",
+    expect(followInstall(pending, ok(answer({ installing }, "0.2.1")))).toMatchObject({ kind: "wait" });
+    expect(followInstall(pending, ok(answer({}, "0.2.1")))).toEqual({ kind: "done", pending });
+  });
+});
+
+describe("the deadline of an unconfirmed attempt", () => {
+  const attempt: PendingInstall = { ...pending, confirmed: false, reason: "The update service did not answer within 10 seconds." };
+
+  it("ends a minute after the attempt started; a page loaded later still asks for a moment", () => {
+    expect(reconcileDeadline(attempt, attempt.startedAt)).toBe(attempt.startedAt + 60_000);
+    expect(reconcileDeadline(attempt, attempt.startedAt + 120_000)).toBe(attempt.startedAt + 130_000);
+  });
+
+  it("did not start when a reachable status answered last without it", () => {
+    expect(reconcileEnd({ ...attempt, lastError: null })).toEqual({
+      kind: "not-started",
+      reason: "The update service did not answer within 10 seconds.",
     });
-    expect(followInstall(pending, { kind: "answer", httpStatus: 200, body: answer({}, "0.2.1") }, soon)).toEqual({ kind: "done" });
+    expect(reconcileEnd({ ...attempt, reason: null, lastError: null })).toEqual({
+      kind: "not-started",
+      reason: "The update service does not report it.",
+    });
+  });
+
+  it("could not be confirmed when no status answered after the latest error", () => {
+    expect(reconcileEnd({ ...attempt, lastError: "Logbook answered HTTP 502." })).toEqual({
+      kind: "unconfirmed",
+      error: "Logbook answered HTTP 502.",
+    });
+    expect(reconcileEnd(newAttempt("0.2.1", attempt.startedAt, null))).toEqual({ kind: "unconfirmed", error: "Logbook did not answer." });
+  });
+
+  it("offers to stop waiting after 15 minutes", () => {
+    expect(isOverdue(pending, pending.startedAt + 15 * 60_000 - 1)).toBe(false);
+    expect(isOverdue(pending, pending.startedAt + 15 * 60_000)).toBe(true);
   });
 });
 
@@ -317,24 +445,51 @@ describe("adoptInstall", () => {
   const now = Date.parse("2026-11-19T09:10:00Z");
   const automatic = { version: "0.2.1", startedAt: "2026-11-19T09:09:00Z", manual: false, stage: "pulling" };
 
-  it("follows an installation the status reports, from its start", () => {
-    expect(adoptInstall(null, answer({ installing: automatic }).updater, now)).toEqual({
+  it("follows an installation the status reports, from its start, with its identity and the earlier result", () => {
+    const earlier = { ...rolledBack, finishedAt: "2026-11-19T08:00:00Z" };
+    expect(adoptInstall(null, answer({ installing: automatic, last: earlier }).updater, now)).toEqual({
       version: "0.2.1",
       startedAt: Date.parse(automatic.startedAt),
+      installingSince: automatic.startedAt,
+      earlier,
       confirmed: true,
       sawOutage: false,
       reason: null,
+      lastError: null,
     });
     expect(adoptInstall(null, answer().updater, now)).toBeNull();
   });
 
-  it("keeps the installation it follows, and confirms it", () => {
-    expect(adoptInstall(pending, answer({ installing: automatic }).updater, now)).toBe(pending);
-    expect(adoptInstall({ ...pending, confirmed: false }, answer({ installing: automatic }).updater, now)).toEqual(pending);
+  it("keeps the installation it follows, confirms it, and stores its identity", () => {
+    const seen = { ...pending, installingSince: automatic.startedAt };
+    expect(adoptInstall(seen, answer({ installing: automatic }).updater, now)).toBe(seen);
+    expect(adoptInstall({ ...pending, confirmed: false }, answer({ installing: automatic }).updater, now)).toEqual(seen);
   });
 
   it("does not follow an installation the admin stopped waiting for", () => {
-    expect(adoptInstall(null, answer({ installing: automatic }).updater, now, installKey(automatic))).toBeNull();
+    const stopped = ignoreInstall({ ...pending, installingSince: automatic.startedAt });
+    expect(adoptInstall(null, answer({ installing: automatic }).updater, now, stopped)).toBeNull();
+    // Another installation of the same version is followed.
+    const later = { ...automatic, startedAt: "2026-11-19T09:20:00Z" };
+    expect(adoptInstall(null, answer({ installing: later }).updater, now, stopped)).toMatchObject({ installingSince: later.startedAt });
+  });
+
+  it("ignores, without a reported identity, every installation of the version from the attempt's start on", () => {
+    const stopped = ignoreInstall({ ...pending, startedAt: Date.parse("2026-11-19T09:00:00.600Z") });
+    expect(isIgnored({ ...automatic, startedAt: "2026-11-19T09:00:00Z" }, stopped)).toBe(true);
+    expect(isIgnored({ ...automatic, startedAt: "2026-11-19T08:59:59Z" }, stopped)).toBe(false);
+    expect(isIgnored({ ...automatic, version: "0.2.2" }, stopped)).toBe(false);
+    expect(isIgnored(automatic, null)).toBe(false);
+  });
+});
+
+describe("checkError", () => {
+  it("shows why a manual check failed, also when the updater cannot be reached", () => {
+    expect(checkError(answer())).toBeNull();
+    expect(checkError(answer({ error: "registry timeout" }))).toBe("The check failed: registry timeout");
+    expect(checkError({ ...answer(), error: "A check runs already." })).toBe("A check runs already.");
+    expect(checkError({ app: { version: "0.2.0" }, reachable: false, updater: null, error: "ENOTFOUND updater" })).toBe("ENOTFOUND updater");
+    expect(checkError({ app: { version: "0.2.0" }, reachable: false, updater: null, error: null })).toBe("The update service is not reachable.");
   });
 });
 

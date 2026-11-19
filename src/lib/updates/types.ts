@@ -88,10 +88,15 @@ export const channelRequestSchema = z.object({ channel: z.enum(["stable", "previ
 
 /** How a browser request to a route under /api/admin/updates ended. */
 export type UpdatesRequestResult =
+  /** An answer with a status (2xx–4xx). */
   | { kind: "answer"; httpStatus: number; body: UpdatesResponse }
-  /** No answer, or 5xx: Logbook restarts (or the network is down). */
-  | { kind: "outage" }
-  /** 401, 403, 404, or a redirect: the admin session ended (or a POST came from elsewhere). */
+  /**
+   * No answer, no answer in time, a 5xx, or an answer that cannot be read:
+   * Logbook restarts (or the network is down). `httpStatus`: of the answer,
+   * when one arrived (a 202 whose body broke off still started an installation).
+   */
+  | { kind: "outage"; httpStatus: number | null; message: string }
+  /** 401, 403, Logbook's 404, or a sign-in page instead of JSON: the admin session ended (or a POST came from elsewhere). */
   | { kind: "signed-out"; message: string }
-  /** Another answer without a status, such as 400. */
-  | { kind: "error"; message: string };
+  /** Another 4xx without a status, such as 400. */
+  | { kind: "error"; httpStatus: number; message: string };
