@@ -240,12 +240,17 @@ async function applySnapshot(tx: Transaction, snapshot: DirectorySnapshot, at: D
         or(isNull(person.externalId), notInArray(person.externalId, listedIds)),
       ),
     )
-    .returning({ oidcSubject: person.oidcSubject });
+    .returning({ id: person.id });
 
-  // Freed subjects (moved users) are handled above; end the sessions of every
-  // person who is no longer listed.
-  const removedSubjects = removed.map((r) => r.oidcSubject).filter((s): s is string => s !== null);
-  const sessionsEnded = await endSessionsForSubjects(tx, removedSubjects);
+  // A session belongs to the person who logged in. End it when its
+  // subject is removed, replaced, or assigned to a different person.
+  const endedSubjects = existing.flatMap((p) => {
+    if (p.oidcSubject === null) return [];
+    const owner = ownerOfSubject.get(p.oidcSubject);
+    const changed = owner === undefined ? p.hasAccess : owner !== p.externalId;
+    return changed ? [p.oidcSubject] : [];
+  });
+  const sessionsEnded = await endSessionsForSubjects(tx, endedSubjects);
 
   return { accessGranted, accessRemoved: removed.length, sessionsEnded };
 }

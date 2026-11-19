@@ -235,6 +235,21 @@ describe("syncDirectory", () => {
     expect(rows.get("new")).toMatchObject({ hasAccess: true, oidcSubject: "sub-same" });
   });
 
+  it("ends sessions when a subject moves to a different person", async () => {
+    const unchanged = directoryPerson({ externalId: "unchanged" });
+    await sync(adapterReturning(snapshot([unchanged, directoryPerson({ externalId: "old", subject: "sub-moved" })])));
+    await loginSession("sub-moved", "token-moved");
+    await loginSession("sub-unchanged", "token-unchanged");
+
+    const result = await sync(adapterReturning(snapshot([
+      unchanged,
+      directoryPerson({ externalId: "new", subject: "sub-moved", isAdmin: true }),
+    ])));
+
+    expect(result).toMatchObject({ status: "succeeded", sessionsEnded: 1 });
+    expect(await db.select({ token: authSession.token }).from(authSession)).toEqual([{ token: "token-unchanged" }]);
+  });
+
   it("handles Keycloak users that move between people who both stay listed", async () => {
     await sync(
       adapterReturning(
