@@ -109,11 +109,11 @@ strings, or values from database queries. The browser sends nothing.
 |---|---|---|
 | `UPDATER_URL` | `http://updater:8080` | Address of the `updater` service's API, which the update button and the Updates card on the admin page ask. Under `compose.yaml`, an empty value also means the default; empty switches both off only where Logbook reads its environment directly, without Compose |
 
-The `updater` service itself takes `UPDATE_COOLDOWN`, `UPDATE_WINDOW`,
-`UPDATE_DEPLOY_HOOK_URL`, and `UPDATE_DEPLOY_HOOK_TOKEN` (see
-[automatic updates](deployment.md#automatic-updates)), and
+The `updater` service itself takes `UPDATE_COOLDOWN` and `UPDATE_WINDOW`
+(see [automatic updates](deployment.md#automatic-updates)), and
 `UPDATE_REGISTRY_USERNAME` and `UPDATE_REGISTRY_PASSWORD` for an image in a
-private registry.
+private registry. On Coolify, it also takes `UPDATE_DEPLOY_HOOK_URL` and
+`UPDATE_DEPLOY_HOOK_TOKEN` ([Coolify](coolify.md#automatic-updates)).
 
 ## Time zone
 
@@ -135,5 +135,7 @@ date format is `DD.MM.YYYY`.
 | `MIGRATIONS_DIR` | `drizzle` | Folder with the SQL migrations |
 
 Docker Compose uses `LOGBOOK_VERSION` to select the image tag. It still
-accepts `LOGBUCH_VERSION` when `LOGBOOK_VERSION` is unset. On a Debian
-server, the updater writes each version it installs into `LOGBOOK_VERSION`.
+accepts `LOGBUCH_VERSION` when `LOGBOOK_VERSION` is unset. With automatic
+updates, the server writes each version it installs into `LOGBOOK_VERSION`.
+`LOGBOOK_PORT` (default 3000) is the host port that `compose.yaml` publishes
+`web` on, on `127.0.0.1` only.
