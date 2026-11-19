@@ -21,7 +21,11 @@ export interface CurrentUser {
  */
 const loadRequestUser = cache(async () => {
   const requestHeaders = await headers();
-  const session = await getAuth().api.getSession({ headers: requestHeaders });
+  const session = await getAuth().api.getSession({ headers: requestHeaders }).catch(() => {
+    // Better Auth logs at the auth boundary. Keep the request failure without
+    // forwarding a database error cause to Next.js or error reporting.
+    throw new Error("Could not read the Logbook session");
+  });
   if (!session?.session.oidcPersonId) return null;
   const person = await findPersonForSession(getDb(), session.session.id);
   return { session, person };

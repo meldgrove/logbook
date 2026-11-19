@@ -194,6 +194,17 @@ describe("login with the OIDC provider", () => {
     expect(await db.select().from(authSession)).toHaveLength(0);
   });
 
+  it("keeps session lookup error details out of protected requests", async () => {
+    const lookup = vi.spyOn(auth.api, "getSession").mockRejectedValueOnce(new Error("diagnostic details"));
+    try {
+      const result = personFor("");
+      await expect(result).rejects.toThrow("Could not read the Logbook session");
+      await expect(result).rejects.not.toHaveProperty("cause");
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
   it("requires a fresh sign-in for a legacy session without a person binding", async () => {
     await addPerson({ oidcSubject: "sub-ada" });
     const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
