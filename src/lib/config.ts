@@ -165,6 +165,22 @@ const versionSchema = z.object({
   APP_VERSION: optional(z.string()),
 });
 
+/** Where the `updater` service of compose.yaml answers. */
+export const DEFAULT_UPDATER_URL = "http://updater:8080";
+
+/**
+ * The Meldgrove Updater's API, for the update button and the Updates card
+ * (docs/deployment.md, Automatic updates). Unset means the `updater` service
+ * of compose.yaml. Unlike other variables, an empty value is not unset: it
+ * switches the update button off.
+ */
+const updaterSchema = z.object({
+  UPDATER_URL: z.preprocess(
+    (value) => (value === undefined ? DEFAULT_UPDATER_URL : typeof value === "string" && value.trim() === "" ? null : value),
+    httpUrl.transform(withoutTrailingSlash).nullable(),
+  ),
+});
+
 /** Error reporting to Sentry: off until SENTRY_DSN is set. Without SENTRY_RELEASE, the release is named after APP_VERSION. */
 const errorReportingSchema = z.object({
   ...versionSchema.shape,
@@ -180,6 +196,7 @@ export type KeycloakDirectoryConfig = Extract<DirectoryConfig, { DIRECTORY: "key
 export type NotificationConfig = z.infer<typeof notificationSchema>;
 export type WebhookConfig = z.infer<typeof webhookSchema>;
 export type VersionConfig = z.infer<typeof versionSchema>;
+export type UpdaterConfig = z.infer<typeof updaterSchema>;
 export type ErrorReportingConfig = z.infer<typeof errorReportingSchema>;
 
 export class ConfigError extends Error {
@@ -220,6 +237,10 @@ export function parseVersionConfig(env: Env = process.env): VersionConfig {
   return parse(versionSchema, env);
 }
 
+export function parseUpdaterConfig(env: Env = process.env): UpdaterConfig {
+  return parse(updaterSchema, env);
+}
+
 export function parseErrorReportingConfig(env: Env = process.env): ErrorReportingConfig {
   return parse(errorReportingSchema, env);
 }
@@ -236,7 +257,7 @@ function validate(schemas: readonly z.ZodType[], env: Env): void {
 
 /** Validates every variable the web process needs. Called once at startup. */
 export function validateWebConfig(env: Env = process.env): void {
-  validate([databaseSchema, authSchema, directorySchema, errorReportingSchema], env);
+  validate([databaseSchema, authSchema, directorySchema, updaterSchema, errorReportingSchema], env);
 }
 
 /** Validates every variable the worker needs. */
@@ -250,6 +271,7 @@ let directoryConfig: DirectoryConfig | undefined;
 let notificationConfig: NotificationConfig | undefined;
 let webhookConfig: WebhookConfig | undefined;
 let versionConfig: VersionConfig | undefined;
+let updaterConfig: UpdaterConfig | undefined;
 let errorReportingConfig: ErrorReportingConfig | undefined;
 
 export function getDatabaseConfig(): DatabaseConfig {
@@ -280,6 +302,11 @@ export function getWebhookConfig(): WebhookConfig {
 export function getVersionConfig(): VersionConfig {
   versionConfig ??= parseVersionConfig();
   return versionConfig;
+}
+
+export function getUpdaterConfig(): UpdaterConfig {
+  updaterConfig ??= parseUpdaterConfig();
+  return updaterConfig;
 }
 
 export function getErrorReportingConfig(): ErrorReportingConfig {
