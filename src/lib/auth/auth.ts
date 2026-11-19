@@ -113,7 +113,8 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
             scopes: config.OIDC_SCOPES.split(/[\s,]+/).filter(Boolean),
             pkce: true,
             requireIdTokenVerification: true,
-            postLogoutRedirectURI: `${config.LOGBOOK_BASE_URL}/`,
+            // Logbook builds the logout URL from the session's OIDC subject.
+            disableProviderLogout: true,
           },
         ],
       }),

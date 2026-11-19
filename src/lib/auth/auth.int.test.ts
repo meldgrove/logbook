@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectTestDatabase } from "../../../tests/integration/db";
 import { startFakeOidcProvider, type FakeOidcProvider, type OidcIdentity } from "../../../tests/integration/oidc-provider";
+import { signOutAction } from "@/app/actions";
+import * as config from "@/lib/config";
 import { getPool } from "@/lib/db/client";
 import { authAccount, authSession, person } from "@/lib/db/schema";
 import { createManualDirectory } from "@/lib/directory/manual";
@@ -10,8 +12,12 @@ import { createAuth, type Auth } from "./auth";
 import { getCurrentPerson } from "./session";
 
 // session.ts reads the request's cookies through next/headers.
-const request = vi.hoisted(() => ({ headers: new Headers() }));
+const request = vi.hoisted(() => ({
+  headers: new Headers(),
+  redirect: vi.fn((_url: string): never => { throw new Error("redirect"); }),
+}));
 vi.mock("next/headers", () => ({ headers: async () => request.headers }));
+vi.mock("next/navigation", () => ({ redirect: request.redirect }));
 
 const BASE_URL = "http://localhost:3000";
 const testDb = connectTestDatabase();
@@ -21,16 +27,18 @@ let auth: Auth;
 
 beforeAll(async () => {
   provider = await startFakeOidcProvider();
+  const authConfig = {
+    LOGBOOK_BASE_URL: BASE_URL,
+    BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
+    OIDC_ISSUER: provider.issuer,
+    OIDC_CLIENT_ID: provider.clientId,
+    OIDC_CLIENT_SECRET: "test-client-secret",
+    OIDC_SCOPES: "openid email profile",
+    OIDC_TRUST_EMAIL: false,
+  };
+  vi.spyOn(config, "getAuthConfig").mockReturnValue(authConfig);
   auth = createAuth({
-    config: {
-      LOGBOOK_BASE_URL: BASE_URL,
-      BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
-      OIDC_ISSUER: provider.issuer,
-      OIDC_CLIENT_ID: provider.clientId,
-      OIDC_CLIENT_SECRET: "test-client-secret",
-      OIDC_SCOPES: "openid email profile",
-      OIDC_TRUST_EMAIL: false,
-    },
+    config: authConfig,
     directory: createManualDirectory({ initialAdmins: [] }),
     db,
   });
@@ -114,9 +122,9 @@ describe("login with the OIDC provider", () => {
     expect(current).toMatchObject({ id: invited.id, oidcSubject: "sub-erika", displayName: "Erika Example" });
   });
 
-  it("stores the provider's access and refresh tokens encrypted, and logs out with the ID token", async () => {
+  it("stores the provider's access and refresh tokens encrypted", async () => {
     await addPerson({ oidcSubject: "sub-ada" });
-    const { cookie, code } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
+    const { code } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
     const issued = provider.tokensFor(code)!;
 
     const [account] = await db.select().from(authAccount).where(eq(authAccount.accountId, "sub-ada"));
@@ -125,17 +133,20 @@ describe("login with the OIDC provider", () => {
     expect(account?.refreshToken).toBeTruthy();
     expect(account?.refreshToken).not.toContain(issued.refreshToken);
     expect(account?.idToken).toBe(issued.idToken);
+  });
 
-    const signOut = await auth.handler(
-      new Request(`${BASE_URL}/api/auth/sign-out`, {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: BASE_URL, cookie },
-        body: JSON.stringify({ callbackURL: "/", disableRedirect: true }),
-      }),
-    );
-    const { url } = (await signOut.json()) as { url: string };
-    expect(new URL(url).searchParams.get("id_token_hint")).toBe(issued.idToken);
-    expect(await db.select().from(authSession)).toHaveLength(0);
+  it("logs out with the ID token for the session's own OIDC subject", async () => {
+    await addPerson({ oidcSubject: "sub-ada" });
+    await addPerson({ oidcSubject: "sub-bea" });
+    const ada = await logIn({ sub: "sub-ada", email: "shared@example.org" });
+    const bea = await logIn({ sub: "sub-bea", email: "shared@example.org" });
+
+    request.headers = new Headers({ cookie: ada.cookie });
+    await expect(signOutAction()).rejects.toThrow("redirect");
+    const logoutUrl = new URL(request.redirect.mock.lastCall![0]);
+    expect(logoutUrl.searchParams.get("id_token_hint")).toBe(provider.tokensFor(ada.code)?.idToken);
+    expect(await personFor(ada.cookie)).toBeNull();
+    expect(await personFor(bea.cookie)).toMatchObject({ oidcSubject: "sub-bea" });
   });
 
   it("gives no session to someone without access", async () => {
