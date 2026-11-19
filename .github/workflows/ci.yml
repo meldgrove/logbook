@@ -43,9 +43,7 @@ jobs:
       # Moderate findings are excluded: the only ones today come from
       # drizzle-kit (a Better Auth peer dependency) and affect esbuild's dev
       # server, which never runs in production.
-      # GHSA-fc5q-39xc-vjpf affects build and test dependencies absent from
-      # the shipped bundles. The exception expires on December 18, 2026 UTC.
-      - run: node scripts/audit-dependencies.mjs
+      - run: npm audit --omit=dev --audit-level=high
 
   integration:
     name: Integration tests (PostgreSQL 18)

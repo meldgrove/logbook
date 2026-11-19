@@ -5,6 +5,7 @@ import { entry, entryImport, person, tag, team } from "@/lib/db/schema";
 import { createNote, logDecision } from "@/lib/entries/commands";
 import { HOW_DECIDED_LABELS, IMPACT_LABELS, NOT_SET, REVERSIBILITY_LABELS, TYPE_LABELS } from "@/lib/entries/constants";
 import { defaultFormatter, serverDate, serverDateTime } from "@/lib/format";
+import { errorMessage } from "@/lib/logger";
 import { parseCsvRecords } from "./csv";
 import { COLUMNS, mapRow, type MappedEntry, type Person } from "./mapping";
 
@@ -225,7 +226,7 @@ export async function runCsvImport(db: Database, csv: string, options: ImportOpt
         continue;
       }
       // Stop, but keep the report: the records above were created.
-      report.failed = error instanceof Error ? error.message : String(error);
+      report.failed = errorMessage(error);
       say(`  Failed: ${report.failed}`);
       say("  Stopped here. The records above were created; fix the file and run again (they are skipped then).");
       break;

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { connectTestDatabase } from "../../../tests/integration/db";
 import { seedDirectory } from "../../../tests/integration/seed";
@@ -45,6 +45,20 @@ const CSV = [
 const options = { teamName: "Engineering", asEmail: "amy@example.org", skip: [] as string[], now: NOW };
 
 describe("the CSV import", () => {
+  it("redacts bound values from the reported error when a confirmed write fails", async () => {
+    const { fingerprint } = await runCsvImport(db, CSV, options);
+    await db.execute(sql`alter table entry add constraint reject_import_fixture check (false)`);
+    try {
+      const report = await runCsvImport(db, CSV, { ...options, confirmFingerprint: fingerprint });
+      expect(report.created).toBe(0);
+      expect(report.failed).toMatch(/^Failed query: [\s\S]+\nparams: \[redacted\]$/);
+      expect(report.lines.find((line) => line.startsWith("  Failed: "))).toBe(`  Failed: ${report.failed}`);
+      expect(await db.select().from(entry)).toHaveLength(0);
+    } finally {
+      await db.execute(sql`alter table entry drop constraint reject_import_fixture`);
+    }
+  });
+
   it("writes nothing in a dry run, prints each record in full, and a review fingerprint", async () => {
     const report = await runCsvImport(db, CSV, options);
     expect(report).toMatchObject({ wouldCreate: 1, problems: 1, created: 0, fingerprint: expect.stringMatching(/^[0-9a-f]{12}$/) });
