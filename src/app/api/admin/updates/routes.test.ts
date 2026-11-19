@@ -22,12 +22,12 @@ vi.mock("@/lib/auth/auth", () => ({
     api: {
       getSession: async () => {
         const person = await mocks.person();
-        return person ? { session: { id: "session", oidcSubject: person.id }, user: { id: "user" } } : null;
+        return person ? { session: { id: "session", oidcPersonId: person.id }, user: { id: "user" } } : null;
       },
     },
   }),
 }));
-vi.mock("@/lib/directory/queries", () => ({ findPersonBySubject: async () => mocks.person() }));
+vi.mock("@/lib/directory/queries", () => ({ findPersonForSession: async () => mocks.person() }));
 vi.mock("@/lib/db/client", () => ({ getDb: () => ({}) }));
 vi.mock("@/lib/config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/config")>()),

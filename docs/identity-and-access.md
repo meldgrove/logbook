@@ -41,9 +41,11 @@ Typical issuer URLs:
 
 The provider must send the `email` claim, and `email_verified` must be true
 for invitations and `INITIAL_ADMIN_EMAILS` to match. A login is linked to a
-person by the OIDC subject (`sub`) after that. Each session belongs to the
-`sub` it signed in with, so two provider accounts with the same email address
-(for example a deleted and recreated account) never share a session.
+person by the OIDC subject (`sub`) after that. Each session belongs to
+the person and `sub` used at sign-in. Two provider accounts with the same
+email address never share a session. If the directory reassigns a subject
+to another person, the old session ends. An upgrade from a release that
+stored only the subject asks everyone to sign in again once.
 
 Some providers never send `email_verified=true`: Microsoft Entra ID does not
 send the claim, and Authentik depends on its scope mapping. If your users

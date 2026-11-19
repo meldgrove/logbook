@@ -1,15 +1,17 @@
-import { betterAuth } from "better-auth";
+import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
+import { DrizzleQueryError } from "drizzle-orm";
+import { DatabaseError } from "pg";
 import { getAuthConfig, type AuthConfig } from "@/lib/config";
 import { getDb, type Database } from "@/lib/db/client";
 import { authAccount, authSession, authUser, authVerification } from "@/lib/db/schema";
 import { getDirectory, type Directory } from "@/lib/directory/directory";
 import { OIDC_PROVIDER_ID } from "@/lib/directory/sessions";
 import { logger } from "@/lib/logger";
-import { hasLoginAccess, NO_ACCESS_ERROR_CODE } from "./access";
+import { admitLogin, NO_ACCESS_ERROR_CODE, type Login } from "./access";
 import { discoveryUrl } from "./discovery-url";
 
 export interface CreateAuthOptions {
@@ -26,6 +28,7 @@ export interface CreateAuthOptions {
  * to that user.
  */
 const loginAccounts = new WeakMap<object, { userId: string; subject: string }>();
+const loginProfiles = new WeakMap<object, Omit<Login, "subject">>();
 
 function rememberLoginAccount(context: object | null, account: { providerId: string; accountId: string; userId: string } | null) {
   if (!context || account?.providerId !== OIDC_PROVIDER_ID) return;
@@ -35,6 +38,13 @@ function rememberLoginAccount(context: object | null, account: { providerId: str
 function loginSubjectOf(context: object | null, userId: string): string | undefined {
   const login = context ? loginAccounts.get(context) : undefined;
   return login?.userId === userId ? login.subject : undefined;
+}
+
+function noAccessError() {
+  return new APIError("FORBIDDEN", {
+    code: NO_ACCESS_ERROR_CODE,
+    message: "You do not have access to Logbook.",
+  });
 }
 
 /**
@@ -50,17 +60,54 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
     basePath: "/api/auth",
     secret: config.BETTER_AUTH_SECRET,
     trustedOrigins: [config.LOGBOOK_BASE_URL],
-    database: drizzleAdapter(db, {
-      provider: "pg",
-      schema: { user: authUser, session: authSession, account: authAccount, verification: authVerification },
-    }),
+    logger: {
+      log(level) {
+        // Better Auth diagnostics can contain provider responses or database
+        // errors with session tokens and other bound values.
+        logger[level]("Better Auth reported an event");
+      },
+    },
+    database: (options: BetterAuthOptions) => {
+      const adapter = drizzleAdapter(db, {
+        provider: "pg",
+        schema: { user: authUser, session: authSession, account: authAccount, verification: authVerification },
+      })(options);
+      const create: typeof adapter.create = async (input) => {
+        try {
+          return await adapter.create(input);
+        } catch (error) {
+          // A subject can move after admission. Report the expected denial
+          // before Better Auth sees a query error with session parameters.
+          if (error instanceof DrizzleQueryError && error.cause instanceof DatabaseError
+            && error.cause.constraint === "logbook_session_person_binding") {
+            throw noAccessError();
+          }
+          throw error;
+        }
+      };
+      return { ...adapter, create };
+    },
     emailAndPassword: { enabled: false },
+    user: {
+      validateUserInfo({ user, source }, context) {
+        // A stored Better Auth profile can outlive an email change or belong
+        // to multiple subjects. Keep the provider's claims for this login.
+        if (source.oauth?.providerId === OIDC_PROVIDER_ID && typeof user.email === "string") {
+          loginProfiles.set(context, {
+            email: user.email,
+            emailVerified: user.emailVerified === true,
+            name: user.name ?? "",
+          });
+        }
+      },
+    },
     session: {
       // No cookie cache: every request checks the session in the database.
       cookieCache: { enabled: false },
       additionalFields: {
         // Set by the session hook below, never from the request.
         oidcSubject: { type: "string", required: true, input: false },
+        oidcPersonId: { type: "string", required: false, input: false },
       },
     },
     // Logbook never uses the provider's access and refresh tokens, but
@@ -71,7 +118,9 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
       cookiePrefix: "logbook",
       useSecureCookies: config.LOGBOOK_BASE_URL.startsWith("https://"),
     },
-    onAPIError: { errorURL: `${config.LOGBOOK_BASE_URL}/login` },
+    // Let Logbook's callback route handle unexpected errors before the HTTP
+    // router can write the exception directly to the console.
+    onAPIError: { errorURL: `${config.LOGBOOK_BASE_URL}/login`, throw: true },
     databaseHooks: {
       account: {
         create: { after: async (account, context) => rememberLoginAccount(context, account) },
@@ -84,20 +133,18 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
           // with; without one, there is no session.
           before: async (session, context) => {
             const subject = loginSubjectOf(context, session.userId);
-            const allowed =
-              subject !== undefined &&
-              (await hasLoginAccess(db, { userId: session.userId, subject }, {
+            const profile = context ? loginProfiles.get(context) : undefined;
+            const personId = subject !== undefined && profile !== undefined
+              ? await admitLogin(db, { ...profile, subject }, {
                 directory,
                 trustEmail: config.OIDC_TRUST_EMAIL,
-              }));
-            if (!allowed) {
+              })
+              : undefined;
+            if (subject === undefined || !personId) {
               logger.info({ userId: session.userId }, "login denied: no access");
-              throw new APIError("FORBIDDEN", {
-                code: NO_ACCESS_ERROR_CODE,
-                message: "You do not have access to Logbook.",
-              });
+              throw noAccessError();
             }
-            return { data: { ...session, oidcSubject: subject } };
+            return { data: { ...session, oidcSubject: subject, oidcPersonId: personId } };
           },
         },
       },
@@ -113,7 +160,8 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
             scopes: config.OIDC_SCOPES.split(/[\s,]+/).filter(Boolean),
             pkce: true,
             requireIdTokenVerification: true,
-            postLogoutRedirectURI: `${config.LOGBOOK_BASE_URL}/`,
+            // Logbook builds the logout URL from the session's OIDC subject.
+            disableProviderLogout: true,
           },
         ],
       }),

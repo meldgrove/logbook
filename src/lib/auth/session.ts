@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { getDb } from "@/lib/db/client";
 import { authSession } from "@/lib/db/schema";
-import { findPersonBySubject, type PersonRow } from "@/lib/directory/queries";
+import { findPersonForSession, type PersonRow } from "@/lib/directory/queries";
 import { createDateFormatter, type DateFormatter } from "@/lib/format";
 import { recordActivity } from "@/lib/measures/activity";
 import { displayPreferences } from "@/lib/preferences";
@@ -17,13 +17,17 @@ export interface CurrentUser {
 
 /**
  * Session and person for this request. Cached per request. The person is the
- * one of the `sub` the session logged in with.
+ * one bound to the session at sign-in, while it still owns the OIDC subject.
  */
 const loadRequestUser = cache(async () => {
   const requestHeaders = await headers();
-  const session = await getAuth().api.getSession({ headers: requestHeaders });
-  if (!session) return null;
-  const person = await findPersonBySubject(getDb(), session.session.oidcSubject);
+  const session = await getAuth().api.getSession({ headers: requestHeaders }).catch(() => {
+    // Better Auth logs at the auth boundary. Keep the request failure without
+    // forwarding a database error cause to Next.js or error reporting.
+    throw new Error("Could not read the Logbook session");
+  });
+  if (!session?.session.oidcPersonId) return null;
+  const person = await findPersonForSession(getDb(), session.session.id);
   return { session, person };
 });
 
