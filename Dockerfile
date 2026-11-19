@@ -3,7 +3,7 @@
 #   worker   pg-boss worker: notifications, webhook, Keycloak directory sync
 #   migrate  applies database migrations, then exits
 
-FROM node:26.13.0-bookworm-slim AS base
+FROM node:26.13.1-bookworm-slim AS base
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 
