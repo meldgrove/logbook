@@ -12,10 +12,12 @@ export interface LoginAccessOptions {
   now?: Date;
 }
 
-/** A login: the Better Auth user and the OIDC `sub` it logged in with. */
+/** The OIDC subject and fresh profile of the current login. */
 export interface Login {
-  userId: string;
   subject: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
 }
 
 /**
@@ -24,12 +26,11 @@ export interface Login {
  * manual directory links an invitation at the first login, the Keycloak
  * directory syncs once and looks again.
  */
-export async function hasLoginAccess(db: Database, { userId, subject }: Login, options: LoginAccessOptions): Promise<boolean> {
-  const known = await findPersonBySubject(db, subject);
+export async function hasLoginAccess(db: Database, login: Login, options: LoginAccessOptions): Promise<boolean> {
+  const known = await findPersonBySubject(db, login.subject);
   if (known?.hasAccess) return true;
   return options.directory.admitNewLogin(db, {
-    userId,
-    subject,
+    ...login,
     known: known !== undefined,
     trustEmail: options.trustEmail ?? false,
     now: options.now ?? new Date(),

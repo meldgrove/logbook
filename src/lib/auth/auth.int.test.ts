@@ -122,6 +122,16 @@ describe("login with the OIDC provider", () => {
     expect(current).toMatchObject({ id: invited.id, oidcSubject: "sub-erika", displayName: "Erika Example" });
   });
 
+  it("checks the current OIDC email before linking an invitation", async () => {
+    await logIn({ sub: "sub-ada", email: "shared@example.org" });
+    const invited = await addPerson({ workEmail: "shared@example.org" });
+
+    const login = await logIn({ sub: "sub-ada", email: "ada@example.org" });
+    expect(login.cookie).not.toContain("session_token");
+    const [row] = await db.select().from(person).where(eq(person.id, invited.id));
+    expect(row?.oidcSubject).toBeNull();
+  });
+
   it("stores the provider's access and refresh tokens encrypted", async () => {
     await addPerson({ oidcSubject: "sub-ada" });
     const { code } = await logIn({ sub: "sub-ada", email: "ada@example.org" });

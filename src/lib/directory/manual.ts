@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { recordAudit } from "@/lib/audit";
 import type { Database } from "@/lib/db/client";
-import { authUser, person } from "@/lib/db/schema";
+import { person } from "@/lib/db/schema";
 import type { Directory, NewLogin } from "./directory";
 import { findPersonBySubject } from "./queries";
 
@@ -27,15 +27,12 @@ export function createManualDirectory({ initialAdmins }: { initialAdmins: string
   };
 }
 
-async function linkFirstLogin(db: Database, { userId, subject, trustEmail, now }: NewLogin, initialAdmins: string[]): Promise<boolean> {
-  const [user] = await db
-    .select({ name: authUser.name, email: authUser.email, emailVerified: authUser.emailVerified })
-    .from(authUser)
-    .where(eq(authUser.id, userId));
-  // Only an email the identity provider verified may claim an invitation.
-  if (!user?.email || !(user.emailVerified || trustEmail)) return false;
-  const email = user.email.trim().toLowerCase();
-  const name = user.name.trim();
+async function linkFirstLogin(db: Database, login: NewLogin, initialAdmins: string[]): Promise<boolean> {
+  const { subject, trustEmail, now } = login;
+  // Only the email from this OIDC login may claim an invitation.
+  const email = login.email.trim().toLowerCase();
+  if (!email || !(login.emailVerified || trustEmail)) return false;
+  const name = login.name.trim();
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${LINK_LOCK_KEY})`);

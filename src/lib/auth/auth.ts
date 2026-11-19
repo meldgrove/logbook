@@ -9,7 +9,7 @@ import { authAccount, authSession, authUser, authVerification } from "@/lib/db/s
 import { getDirectory, type Directory } from "@/lib/directory/directory";
 import { OIDC_PROVIDER_ID } from "@/lib/directory/sessions";
 import { logger } from "@/lib/logger";
-import { hasLoginAccess, NO_ACCESS_ERROR_CODE } from "./access";
+import { hasLoginAccess, NO_ACCESS_ERROR_CODE, type Login } from "./access";
 import { discoveryUrl } from "./discovery-url";
 
 export interface CreateAuthOptions {
@@ -26,6 +26,7 @@ export interface CreateAuthOptions {
  * to that user.
  */
 const loginAccounts = new WeakMap<object, { userId: string; subject: string }>();
+const loginProfiles = new WeakMap<object, Omit<Login, "subject">>();
 
 function rememberLoginAccount(context: object | null, account: { providerId: string; accountId: string; userId: string } | null) {
   if (!context || account?.providerId !== OIDC_PROVIDER_ID) return;
@@ -55,6 +56,19 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
       schema: { user: authUser, session: authSession, account: authAccount, verification: authVerification },
     }),
     emailAndPassword: { enabled: false },
+    user: {
+      validateUserInfo({ user, source }, context) {
+        // A stored Better Auth profile can outlive an email change or belong
+        // to multiple subjects. Keep the provider's claims for this login.
+        if (source.oauth?.providerId === OIDC_PROVIDER_ID && typeof user.email === "string") {
+          loginProfiles.set(context, {
+            email: user.email,
+            emailVerified: user.emailVerified === true,
+            name: user.name ?? "",
+          });
+        }
+      },
+    },
     session: {
       // No cookie cache: every request checks the session in the database.
       cookieCache: { enabled: false },
@@ -84,9 +98,10 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
           // with; without one, there is no session.
           before: async (session, context) => {
             const subject = loginSubjectOf(context, session.userId);
+            const profile = context ? loginProfiles.get(context) : undefined;
             const allowed =
-              subject !== undefined &&
-              (await hasLoginAccess(db, { userId: session.userId, subject }, {
+              subject !== undefined && profile !== undefined &&
+              (await hasLoginAccess(db, { ...profile, subject }, {
                 directory,
                 trustEmail: config.OIDC_TRUST_EMAIL,
               }));

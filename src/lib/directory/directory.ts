@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import type { Login } from "@/lib/auth/access";
 import { getDirectoryConfig, type DirectoryConfig } from "@/lib/config";
 import { getPool, type Database } from "@/lib/db/client";
 import { createKeycloakDirectoryAdapter } from "./keycloak-adapter";
@@ -43,11 +44,7 @@ export interface DirectorySync {
   run(trigger: SyncTrigger, minIntervalMs?: number): Promise<SyncResult>;
 }
 
-export interface NewLogin {
-  /** The Better Auth user. */
-  userId: string;
-  /** The OIDC `sub`. */
-  subject: string;
+export interface NewLogin extends Login {
   /** A person with this subject exists, without access. */
   known: boolean;
   /** Treat the provider's email addresses as verified (OIDC_TRUST_EMAIL). */
