@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { connectTestDatabase } from "../../../tests/integration/db";
 import { startFakeOidcProvider, type FakeOidcProvider, type OidcIdentity } from "../../../tests/integration/oidc-provider";
 import { signOutAction } from "@/app/actions";
+import { GET as oidcCallback } from "@/app/api/auth/callback/oidc/route";
 import * as config from "@/lib/config";
 import * as database from "@/lib/db/client";
 import { authAccount, authSession, person } from "@/lib/db/schema";
@@ -79,8 +80,7 @@ async function logIn(identity: OidcIdentity) {
   const callback = new URL(authorization.searchParams.get("redirect_uri")!);
   callback.searchParams.set("code", code);
   callback.searchParams.set("state", authorization.searchParams.get("state")!);
-  const response = await auth.handler(new Request(callback, { headers: { cookie: cookiesOf(start) } }));
-  expect(response.status).toBe(302);
+  const response = await oidcCallback(new Request(callback, { headers: { cookie: cookiesOf(start) } }));
   return { response, cookie: cookiesOf(response), code };
 }
 
@@ -105,6 +105,24 @@ describe("login with the OIDC provider", () => {
       expect(log.mock.calls).toEqual([["Better Auth reported an event"]]);
     } finally {
       log.mockRestore();
+    }
+  });
+
+  it("handles an unexpected callback failure without logging the exception", async () => {
+    const admission = vi.spyOn(access, "admitLogin").mockRejectedValueOnce(new Error("diagnostic details"));
+    const frameworkLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const appLog = vi.spyOn(logger, "error");
+    try {
+      const { response, cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe("/login?error=OIDC_CALLBACK_FAILED");
+      expect(cookie).not.toContain("session_token");
+      expect(frameworkLog).not.toHaveBeenCalled();
+      expect(appLog.mock.calls).toEqual([["OIDC callback failed"]]);
+    } finally {
+      admission.mockRestore();
+      frameworkLog.mockRestore();
+      appLog.mockRestore();
     }
   });
 

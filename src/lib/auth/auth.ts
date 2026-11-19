@@ -118,7 +118,9 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
       cookiePrefix: "logbook",
       useSecureCookies: config.LOGBOOK_BASE_URL.startsWith("https://"),
     },
-    onAPIError: { errorURL: `${config.LOGBOOK_BASE_URL}/login` },
+    // Let Logbook's callback route handle unexpected errors before the HTTP
+    // router can write the exception directly to the console.
+    onAPIError: { errorURL: `${config.LOGBOOK_BASE_URL}/login`, throw: true },
     databaseHooks: {
       account: {
         create: { after: async (account, context) => rememberLoginAccount(context, account) },
