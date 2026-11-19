@@ -19,11 +19,10 @@ Meldgrove apps, Radix), sonner, pino, Vitest, Playwright.
 - `@meldgrove/ui`: the shadcn/ui components (`@meldgrove/ui/<name>`), `cn`
   (`@meldgrove/ui/utils`), the theme (imported in `src/app/globals.css`), the
   toaster (root layout), and the update button with the Updates card
-  (`@meldgrove/ui/updates`; `src/components/updates.tsx` connects them to
-  `/api/admin/updates`). Use them for every control, list, and panel. Change
-  or add components in the package, not here; `src/components/kbd.tsx`
-  (contrast) and `scroll-table.tsx` (a focusable scroll region) keep
-  Logbook's changes. The app shell (sidebar, header, breadcrumb) follows
+  (`@meldgrove/ui/updates`; the provider for admins sits in
+  `src/app/(app)/layout.tsx` and calls `/api/admin/updates`). Use them for
+  every control, list, and panel. Change or add components in the package,
+  not here. The app shell (sidebar, header, breadcrumb) follows
   `src/lib/navigation.ts`.
 - `src/lib/<module>/`: `auth`, `directory` (manual and Keycloak directory),
   `db`, `entries`, `process`, `calendar`, `audit`, `health`, `jobs`,

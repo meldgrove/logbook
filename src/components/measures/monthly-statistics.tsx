@@ -1,6 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@meldgrove/ui/card";
-import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@meldgrove/ui/table";
-import { ScrollTable } from "@/components/scroll-table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@meldgrove/ui/table";
 import { getFormatter } from "@/lib/auth/session";
 import type { Measures } from "@/lib/measures/summary";
 
@@ -34,7 +33,7 @@ export async function MonthlyStatistics({ measures }: { measures: Measures }) {
           Since the start: {measures.total.started} {measures.total.started === 1 ? "proposal" : "proposals"} submitted,{" "}
           {measures.total.finished} finished ({percent(measures.total.finished, measures.total.started)}).
         </p>
-        <ScrollTable label="Statistics by month">
+        <Table scrollLabel="Statistics by month">
           <TableHeader>
             <TableRow>
               <TableHead>Month</TableHead>
@@ -80,7 +79,7 @@ export async function MonthlyStatistics({ measures }: { measures: Measures }) {
               </TableRow>
             ))}
           </TableBody>
-        </ScrollTable>
+        </Table>
         <p className="text-xs text-muted-foreground">
           Months in the server&apos;s time zone. Days to decision: the median number of working days from submission to the
           decision, for decisions made that month. Active people opened Logbook at least once

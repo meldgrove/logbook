@@ -4,12 +4,12 @@ import { Badge } from "@meldgrove/ui/badge";
 import { Button } from "@meldgrove/ui/button";
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@meldgrove/ui/command";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@meldgrove/ui/dialog";
+import { Kbd, KbdGroup } from "@meldgrove/ui/kbd";
 import { SidebarMenuButton } from "@meldgrove/ui/sidebar";
 import { cn } from "@meldgrove/ui/utils";
 import { ArrowDown, ArrowUp, CornerDownLeft, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Kbd, KbdGroup } from "@/components/kbd";
 import type { SearchResult } from "@/lib/entries/search";
 import { timelineHref } from "@/lib/entries/timeline-filters";
 

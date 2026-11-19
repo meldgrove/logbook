@@ -54,10 +54,13 @@ test("a member of the Keycloak admin group sees the admin area", async ({ page }
   // Without WEBHOOK_URL, the worker sends nothing.
   await expect(page.getByRole("heading", { name: "Webhook" })).toBeVisible();
   await expect(page.locator("dt", { hasText: /^Webhook$/ }).locator("..")).toContainText("Off");
-  // Without an update service (no `updater` answers here), the update button and the Updates card say so.
-  await expect(page.getByRole("button", { name: "No update service. See the deployment guide." })).toBeVisible();
+  // Without an update service (no `updater` answers here), the update button and the Updates card say so,
+  // with the reason the route gives.
+  const updateButton = page.locator("[data-update-state]");
+  await expect(updateButton).toHaveAttribute("data-update-state", "unreachable");
+  await expect(updateButton).toHaveAccessibleName(/^The update service at .+ cannot be reached/);
   await expect(page.getByRole("heading", { name: "Updates", exact: true })).toBeVisible();
-  await expect(page.getByText("The update service is not reachable.")).toBeVisible();
+  await expect(page.getByText("Automatic updates need the updater service from compose.yaml")).toBeVisible();
   await expectAccessible(page);
 
   // People and teams come from Keycloak and are read-only.
