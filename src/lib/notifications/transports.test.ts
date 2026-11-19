@@ -1,3 +1,4 @@
+import { setImmediate } from "node:timers/promises";
 import { describe, expect, it, vi } from "vitest";
 import { createDateFormatter, dateToken } from "@/lib/format";
 import { emailContent, slackText } from "./format-message";
@@ -157,9 +158,31 @@ describe("MailerSend", () => {
     });
   });
 
-  it("reports a rejected email with the status and body", async () => {
+  it("reports a rejected email using only the HTTP status", async () => {
     const { fetchImpl } = fakeFetch(new Response('{"message":"The from.email domain must be verified"}', { status: 422 }));
-    await expect(createMailerSendTransport(options, fetchImpl).send(email)).rejects.toThrow(/HTTP 422 .*must be verified/);
+    await expect(createMailerSendTransport(options, fetchImpl).send(email)).rejects.toThrow(/^MailerSend: HTTP 422$/);
+  });
+
+  it.each([202, 429])("cancels the unused HTTP %i body without waiting for cancellation", async (status) => {
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const response = new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("provider response"));
+        controller.close();
+      },
+      cancel,
+    }), { status, headers: { "Retry-After": "30" } });
+    const readText = vi.spyOn(response, "text");
+    const { fetchImpl } = fakeFetch(response);
+    const send = Promise.race([
+      createMailerSendTransport(options, fetchImpl).send(email),
+      setImmediate("cancellation still pending"),
+    ]);
+
+    if (response.ok) await expect(send).resolves.toBeUndefined();
+    else await expect(send).rejects.toMatchObject({ message: "MailerSend: HTTP 429", permanent: false, retryAfterMs: 30_000 });
+    expect(readText).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("treats a rejected email as permanent, and outages and rate limits as temporary", async () => {

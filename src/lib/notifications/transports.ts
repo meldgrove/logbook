@@ -160,9 +160,10 @@ export function createMailerSendTransport(
       } catch (error) {
         throw new DeliveryError(`MailerSend: ${error instanceof Error ? error.message : String(error)}`);
       }
+      // Provider response bodies can echo email content. Diagnostics use only the status.
+      void response.body?.cancel().catch(() => {});
       if (response.ok) return;
-      const body = (await response.text().catch(() => "")).slice(0, 300);
-      throw new DeliveryError(`MailerSend: HTTP ${response.status} ${body}`.trim(), {
+      throw new DeliveryError(`MailerSend: HTTP ${response.status}`, {
         retryAfterMs: retryAfterMs(response),
         permanent: !temporaryStatus(response.status),
       });

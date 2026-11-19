@@ -10,7 +10,7 @@ import {
 } from "@/lib/config";
 import { getDb, getPool } from "@/lib/db/client";
 import { envValue } from "@/lib/env";
-import { asError, sentryOptions } from "@/lib/error-reporting";
+import { asError, sentryOptions, withoutQueryParameters } from "@/lib/error-reporting";
 import { getDirectory } from "@/lib/directory/directory";
 import type { SyncTrigger } from "@/lib/directory/sync";
 import { SERVER_TIME_ZONE } from "@/lib/format";
@@ -21,7 +21,7 @@ import {
   QUEUES,
   REMINDERS_CRON,
 } from "@/lib/jobs/queues";
-import { logger } from "@/lib/logger";
+import { errorMessage, logger } from "@/lib/logger";
 import { retrySlackLookups, startDispatcher } from "@/lib/notifications/dispatch";
 import { notifyLostAccess, recordReminders } from "@/lib/notifications/notify";
 import { refreshReadiness } from "@/lib/process/commands";
@@ -43,8 +43,10 @@ async function main() {
     application_name: "logbook-worker-pgboss",
   });
   boss.on("error", (error) => {
-    logger.error({ err: error }, "pg-boss error");
-    Sentry.captureException(asError(error));
+    // pg-boss errors can carry a PostgreSQL client or bound query values.
+    const exception = asError(error);
+    logger.error({ error: withoutQueryParameters(errorMessage(exception)) }, "pg-boss error");
+    Sentry.captureException(exception);
   });
   await boss.start();
 

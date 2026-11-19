@@ -67,10 +67,10 @@ export function createWebhookClient(options: {
       } catch (error) {
         throw new WebhookError(`Request to ${new URL(options.url).origin} failed: ${(error as Error).message}`, { cause: error });
       }
-      if (!response.ok) {
-        const text = (await response.text().catch(() => "")).slice(0, 300);
-        throw new WebhookError(`The webhook answered HTTP ${response.status} ${text}`.trim());
-      }
+      // The status determines delivery. Discard the body so receiver content
+      // is neither buffered in memory nor copied into delivery diagnostics.
+      void response.body?.cancel().catch(() => {});
+      if (!response.ok) throw new WebhookError(`The webhook answered HTTP ${response.status}`);
     },
   };
 }
