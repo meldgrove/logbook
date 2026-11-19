@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { DrizzleQueryError, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { connectTestDatabase } from "../../../tests/integration/db";
 import { directoryPerson, snapshot, TEAM_OPS, TEAM_TECH } from "../../../tests/fixtures/directory";
@@ -202,6 +202,20 @@ describe("syncDirectory", () => {
     const runs = await db.select().from(directorySyncRun).orderBy(directorySyncRun.startedAt);
     expect(runs.map((r) => r.status)).toEqual(["succeeded", "failed"]);
     expect(runs[1]?.error).toBe("connect ECONNREFUSED");
+  });
+
+  it("redacts query parameters in the stored and returned failure", async () => {
+    const query = "select $1";
+    const result = await sync({
+      name: "fixture",
+      async fetchSnapshot() {
+        throw new DrizzleQueryError(query, ["private@example.test"], new Error("query failed"));
+      },
+    });
+
+    const error = `Failed query: ${query}\nparams: [redacted]`;
+    expect(result).toMatchObject({ status: "failed", error });
+    expect(await db.select().from(directorySyncRun)).toMatchObject([{ status: "failed", error }]);
   });
 
   it("keeps the last projection when the directory returns no people", async () => {

@@ -10,7 +10,7 @@ import {
 } from "@/lib/config";
 import { getDb, getPool } from "@/lib/db/client";
 import { envValue } from "@/lib/env";
-import { asError, sentryOptions, withoutQueryParameters } from "@/lib/error-reporting";
+import { asError, sentryOptions } from "@/lib/error-reporting";
 import { getDirectory } from "@/lib/directory/directory";
 import type { SyncTrigger } from "@/lib/directory/sync";
 import { SERVER_TIME_ZONE } from "@/lib/format";
@@ -45,7 +45,7 @@ async function main() {
   boss.on("error", (error) => {
     // pg-boss errors can carry a PostgreSQL client or bound query values.
     const exception = asError(error);
-    logger.error({ error: withoutQueryParameters(errorMessage(exception)) }, "pg-boss error");
+    logger.error({ error: errorMessage(exception) }, "pg-boss error");
     Sentry.captureException(exception);
   });
   await boss.start();
