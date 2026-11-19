@@ -1,11 +1,11 @@
 "use client";
 
+import { Button } from "@meldgrove/ui/button";
 import type { FormState } from "@/app/(app)/entry-actions";
 import { describedBy, Field, FormError } from "@/components/form/field";
 import { MarkdownField } from "@/components/form/markdown-field";
 import { PersonalDataField } from "@/components/form/personal-data-field";
 import { useFormAction } from "@/components/form/use-form-action";
-import { Button } from "@/components/ui/button";
 
 export function AddendumForm({ action }: { action: (state: FormState, formData: FormData) => Promise<FormState> }) {
   const { state, onSubmit, pending } = useFormAction(action);

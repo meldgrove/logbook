@@ -1,13 +1,13 @@
+import { Badge } from "@meldgrove/ui/badge";
+import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@meldgrove/ui/card";
+import { cn } from "@meldgrove/ui/utils";
 import Link from "next/link";
 import { EntryBadges } from "@/components/entries/entry-parts";
 import { PROPOSAL_BADGES } from "@/components/proposals/labels";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import type { TimelineItem } from "@/lib/entries/queries";
 import { entryPath, formatEntryRef } from "@/lib/entries/refs";
 import { getFormatter } from "@/lib/auth/session";
 import type { ProposalStatus } from "@/lib/process/rules";
-import { cn } from "@/lib/utils";
 
 /** One entry in the timeline. The whole card links to the entry. */
 export async function EntryCard({ item }: { item: TimelineItem }) {

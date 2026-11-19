@@ -1,10 +1,10 @@
+import { Item, ItemTitle } from "@meldgrove/ui/item";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@meldgrove/ui/table";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DiffView } from "@/components/entries/diff-view";
 import { PageHeader } from "@/components/page-header";
-import { Item, ItemTitle } from "@/components/ui/item";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getFormatter, requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { IMPACT_LABELS, NOT_SET, REVERSIBILITY_LABELS, TYPE_LABELS, type Impact } from "@/lib/entries/constants";

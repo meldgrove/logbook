@@ -1,6 +1,6 @@
+import { Alert, AlertDescription, AlertTitle } from "@meldgrove/ui/alert";
 import { UsersRound } from "lucide-react";
 import Link from "next/link";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 /** Shown instead of the entry forms while there is no active team: every entry belongs to one. */
 export function NoTeamsNotice({ isAdmin, editable }: { isAdmin: boolean; editable: boolean }) {

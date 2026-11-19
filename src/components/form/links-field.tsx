@@ -1,9 +1,9 @@
 "use client";
 
+import { Button } from "@meldgrove/ui/button";
+import { Input } from "@meldgrove/ui/input";
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { LINKS_MAX } from "@/lib/entries/constants";
 
 /** A list of URL inputs, each submitted as `links`. */

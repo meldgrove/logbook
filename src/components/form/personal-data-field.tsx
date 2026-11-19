@@ -1,8 +1,8 @@
 "use client";
 
+import { Checkbox } from "@meldgrove/ui/checkbox";
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
 import { useId } from "react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { PERSONAL_DATA_CONFIRMATION, PERSONAL_DATA_NOTICE } from "@/lib/entries/constants";
 
 /**
