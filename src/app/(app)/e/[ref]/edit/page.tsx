@@ -1,9 +1,9 @@
+import { PageHeader } from "@meldgrove/ui/page";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { editNoteAction } from "@/app/(app)/entry-actions";
 import { saveDraftAction } from "@/app/(app)/proposal-actions";
 import { LogForm } from "@/components/entries/log-form";
-import { PageHeader } from "@/components/page-header";
 import { ProposalForm } from "@/components/proposals/proposal-form";
 import { getFormatter, requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";

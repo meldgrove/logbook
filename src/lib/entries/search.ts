@@ -1,3 +1,5 @@
+import type { SearchResult as FrameSearchResult } from "@meldgrove/ui/app-frame";
+
 /**
  * The words of a search as a PostgreSQL tsquery: every word must match, and
  * the last one may be the start of a word, so the search finds entries while
@@ -24,4 +26,17 @@ export interface SearchResult {
   /** The entry's type, or where a proposal stands. */
   kind: string;
   href: string;
+}
+
+/**
+ * The entries for the frame's search (⌘K): from two characters on, or one
+ * digit, so "7" finds LB-7. Shorter queries show only the app's pages.
+ */
+export async function findEntries(query: string, signal: AbortSignal, request: typeof fetch = fetch): Promise<FrameSearchResult[]> {
+  const term = query.trim();
+  if (term.length < 2 && !/^\d$/.test(term)) return [];
+  const response = await request(`/api/search?${new URLSearchParams({ q: term })}`, { signal });
+  if (!response.ok) throw new Error(`The search answered ${response.status}.`);
+  const { results } = (await response.json()) as { results: SearchResult[] };
+  return results.map(({ ref, title, kind, href }) => ({ href, title, reference: ref, kind }));
 }

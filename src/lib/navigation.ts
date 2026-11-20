@@ -1,37 +1,46 @@
 /*
  * The app's navigation: the sidebar items and the breadcrumb of each page.
- * Pure functions of the path, so the client components only render them.
+ * Pure data and functions of the path; `LogbookFrame` hands them to the
+ * frame of `@meldgrove/ui`, which marks the current item.
  */
 
-/** Shown above the other items, as the main action. */
-export const NEW_ENTRY = { key: "new", href: "/new", label: "New entry" } as const;
+export type NavKey = "timeline" | "tasks" | "stats" | "admin" | "people" | "teams" | "tags";
 
-export const MAIN_NAV = [
-  { key: "timeline", href: "/", label: "Timeline" },
-  { key: "tasks", href: "/tasks", label: "My tasks" },
-  { key: "stats", href: "/stats", label: "Statistics" },
-] as const;
+export interface NavLink {
+  key: NavKey;
+  href: string;
+  label: string;
+  /** "G then this letter" opens the page: main pages only, each letter once; "o" is the start page. */
+  shortcut?: string;
+  /** More paths whose pages belong to this item, with their sub-pages. */
+  match?: string[];
+}
 
-export const ADMIN_NAV = [
+export interface NavSection {
+  label?: string;
+  items: NavLink[];
+}
+
+/**
+ * The main pages. Entries (/e/…) and the new entry forms (/new…) belong to the
+ * timeline; "New entry" itself is a button in the timeline's header.
+ */
+export const MAIN_NAV: NavLink[] = [
+  { key: "timeline", href: "/", label: "Timeline", shortcut: "o", match: ["/e", "/new"] },
+  { key: "tasks", href: "/tasks", label: "My tasks", shortcut: "m" },
+  { key: "stats", href: "/stats", label: "Statistics", shortcut: "s" },
+];
+
+export const ADMIN_NAV: NavLink[] = [
   { key: "admin", href: "/admin", label: "Admin" },
   { key: "people", href: "/admin/people", label: "People" },
   { key: "teams", href: "/admin/teams", label: "Teams" },
   { key: "tags", href: "/admin/tags", label: "Tags" },
-] as const;
+];
 
-export type NavKey = typeof NEW_ENTRY.key | (typeof MAIN_NAV)[number]["key"] | (typeof ADMIN_NAV)[number]["key"];
-
-/** The sidebar item a page belongs to. Entry pages belong to the timeline. */
-export function activeNavKey(pathname: string): NavKey | undefined {
-  if (pathname === "/" || pathname.startsWith("/e/")) return "timeline";
-  if (pathname === "/tasks") return "tasks";
-  if (pathname === "/new" || pathname.startsWith("/new/")) return "new";
-  if (pathname === "/stats") return "stats";
-  if (pathname === "/admin") return "admin";
-  if (pathname === "/admin/people") return "people";
-  if (pathname === "/admin/teams") return "teams";
-  if (pathname === "/admin/tags") return "tags";
-  return undefined;
+/** The sidebar of a person: the main pages, and the administration for admins. */
+export function navSections(isAdmin: boolean): NavSection[] {
+  return isAdmin ? [{ items: MAIN_NAV }, { label: "Administration", items: ADMIN_NAV }] : [{ items: MAIN_NAV }];
 }
 
 export interface Crumb {
@@ -40,6 +49,8 @@ export interface Crumb {
   href?: string;
 }
 
+const TIMELINE: Crumb = { label: "Timeline", href: "/" };
+const NEW_ENTRY = "New entry";
 const NEW_PAGES: Record<string, string> = { log: "Log something", proposal: "New proposal" };
 const ENTRY_PAGES: Record<string, string> = { edit: "Edit", history: "History", decide: "Decide" };
 const ADMIN_PAGES: Record<string, string> = { people: "People", teams: "Teams", tags: "Tags" };
@@ -52,7 +63,7 @@ function entryRef(segment: string): string {
   }
 }
 
-/** The breadcrumb shown in the header, from the section to the current page. */
+/** The breadcrumb shown in the header, from the sidebar section to the current page (at most three steps). */
 export function breadcrumbsFor(pathname: string): Crumb[] {
   const segments = pathname.split("/").filter(Boolean);
   const [section, child, grandchild] = segments;
@@ -65,7 +76,7 @@ export function breadcrumbsFor(pathname: string): Crumb[] {
       return [{ label: "Statistics" }];
     case "new": {
       const page = child ? NEW_PAGES[child] : undefined;
-      return page ? [{ label: "New entry", href: "/new" }, { label: page }] : [{ label: "New entry" }];
+      return page ? [TIMELINE, { label: NEW_ENTRY, href: "/new" }, { label: page }] : [TIMELINE, { label: NEW_ENTRY }];
     }
     case "admin": {
       const page = child ? ADMIN_PAGES[child] : undefined;
@@ -74,12 +85,10 @@ export function breadcrumbsFor(pathname: string): Crumb[] {
     case "settings":
       return [{ label: "Settings" }];
     case "e": {
-      if (!child) return [{ label: "Timeline", href: "/" }];
+      if (!child) return [TIMELINE];
       const ref = entryRef(child);
       const page = grandchild ? ENTRY_PAGES[grandchild] : undefined;
-      return page
-        ? [{ label: "Timeline", href: "/" }, { label: ref, href: `/e/${child}` }, { label: page }]
-        : [{ label: "Timeline", href: "/" }, { label: ref }];
+      return page ? [TIMELINE, { label: ref, href: `/e/${child}` }, { label: page }] : [TIMELINE, { label: ref }];
     }
     default:
       return [];

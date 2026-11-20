@@ -44,7 +44,7 @@ test("an employee posts an update with Markdown and a link, and finds it in the 
 
   // The search in the sidebar finds entries while typing; Enter opens the first.
   await page.keyboard.press("ControlOrMeta+K");
-  const search = page.getByRole("dialog", { name: "Search entries" });
+  const search = page.getByRole("dialog", { name: "Search Logbook…" });
   await search.getByRole("combobox").fill(`${runId} onboard`);
   await expect(search.getByRole("option")).toHaveCount(1);
   await expect(search.getByRole("option", { name: new RegExp(`${ref}.*${title}`) })).toBeVisible();
@@ -53,11 +53,11 @@ test("an employee posts an update with Markdown and a link, and finds it in the 
   await expect(page).toHaveURL(new RegExp(`/e/${ref}$`));
   await expect(search).toBeHidden();
 
-  // "View all results" shows the search in the timeline.
-  await page.getByRole("button", { name: "Search entries" }).click();
+  // "Show all results" shows the search in the timeline.
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   await search.getByRole("combobox").fill(ref);
   await expect(search.getByRole("option", { name: new RegExp(`${ref}.*${title}`) })).toBeVisible();
-  await search.getByRole("button", { name: "View all results" }).click();
+  await search.getByRole("button", { name: "Show all results" }).click();
   await expect(page).toHaveURL(new RegExp(`/\\?q=${ref}$`));
   await expect(page.getByRole("article")).toHaveCount(1);
   await expect(page.getByRole("link", { name: title })).toBeVisible();

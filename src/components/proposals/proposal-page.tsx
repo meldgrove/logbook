@@ -7,6 +7,7 @@ import { Input } from "@meldgrove/ui/input";
 import { Item, ItemActions, ItemContent, ItemTitle } from "@meldgrove/ui/item";
 import { Label } from "@meldgrove/ui/label";
 import { NativeSelect, NativeSelectOption } from "@meldgrove/ui/native-select";
+import { PageHeader } from "@meldgrove/ui/page";
 import { Textarea } from "@meldgrove/ui/textarea";
 import { cn } from "@meldgrove/ui/utils";
 import { Check, ChevronDown, CircleAlert, Gavel, History, Pencil } from "lucide-react";
@@ -37,7 +38,6 @@ import { MarkdownField } from "@/components/form/markdown-field";
 import { OptionPicker, type PickerOption } from "@/components/form/option-picker";
 import { PersonalDataField, PersonalDataNotice } from "@/components/form/personal-data-field";
 import { Markdown } from "@/components/markdown";
-import { PageHeader } from "@/components/page-header";
 import { REVERSIBILITY_LABELS, SUMMARY_MAX } from "@/lib/entries/constants";
 import { textDiff } from "@/lib/entries/diff";
 import type { EntryDetail } from "@/lib/entries/queries";
@@ -91,47 +91,48 @@ export async function ProposalPage({ entry, view, people, viewerId, mayAddAddend
 
   return (
     <article className="flex max-w-3xl flex-col gap-8">
-      <PageHeader
-        title={entry.title}
-        eyebrow={
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <EntryBadges
-              type="decision"
-              impact={entry.impact}
-              reversibility={view.reversibility}
-              status={PROPOSAL_BADGES[view.status]}
-              superseded={Boolean(entry.supersededBy)}
-            />
-            <span className="text-xs text-muted-foreground tabular-nums">{ref}</span>
-          </div>
-        }
-        description={
-          <>
-            {entry.teamName} · proposed by {view.proposer.name}
-            {entry.submittedAt ? ` · ${fmt.dateTime(entry.submittedAt)}` : " · private draft"}
-          </>
-        }
-        actions={
-          <>
-            {view.decider.id === viewerId && open ? (
-              <Button asChild size="sm">
-                <Link href={`${entryPath(entry.number)}/decide`}>
-                  <Gavel aria-hidden="true" />
-                  Decide
-                </Link>
-              </Button>
-            ) : null}
-            {view.status !== "draft" ? (
-              <Button asChild size="sm" variant="ghost">
-                <Link href={`${entryPath(entry.number)}/history`}>
-                  <History aria-hidden="true" />
-                  History
-                </Link>
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <EntryBadges
+            type="decision"
+            impact={entry.impact}
+            reversibility={view.reversibility}
+            status={PROPOSAL_BADGES[view.status]}
+            superseded={Boolean(entry.supersededBy)}
+          />
+          <span className="text-xs text-muted-foreground tabular-nums">{ref}</span>
+        </div>
+        <PageHeader
+          // An entry's title wraps; the package's header keeps a title on one line.
+          title={<span className="whitespace-normal wrap-anywhere">{entry.title}</span>}
+          description={
+            <>
+              {entry.teamName} · proposed by {view.proposer.name}
+              {entry.submittedAt ? ` · ${fmt.dateTime(entry.submittedAt)}` : " · private draft"}
+            </>
+          }
+          actions={
+            <>
+              {view.decider.id === viewerId && open ? (
+                <Button asChild size="sm">
+                  <Link href={`${entryPath(entry.number)}/decide`}>
+                    <Gavel aria-hidden="true" />
+                    Decide
+                  </Link>
+                </Button>
+              ) : null}
+              {view.status !== "draft" ? (
+                <Button asChild size="sm" variant="ghost">
+                  <Link href={`${entryPath(entry.number)}/history`}>
+                    <History aria-hidden="true" />
+                    History
+                  </Link>
+                </Button>
+              ) : null}
+            </>
+          }
+        />
+      </div>
 
       <PhaseStepper view={view} />
 

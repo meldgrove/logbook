@@ -1,9 +1,9 @@
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@meldgrove/ui/item";
+import { PageHeader } from "@meldgrove/ui/page";
 import { ChevronRight, MessagesSquare, NotebookPen } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { NoTeamsNotice } from "@/components/entries/no-teams-notice";
-import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { getDirectory } from "@/lib/directory/directory";

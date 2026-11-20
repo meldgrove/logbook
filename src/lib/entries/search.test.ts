@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { searchTsQuery } from "./search";
+import { describe, expect, it, vi } from "vitest";
+import { findEntries, searchTsQuery } from "./search";
 
 describe("searchTsQuery", () => {
   it("requires every word and lets the last one be the start of a word", () => {
@@ -30,5 +30,32 @@ describe("searchTsQuery", () => {
     expect(searchTsQuery(Array.from({ length: 30 }, (_, i) => `w${i}`).join(" "))).toBe(
       `${Array.from({ length: 19 }, (_, i) => `'w${i}'`).join(" & ")} & 'w19':*`,
     );
+  });
+});
+
+describe("findEntries", () => {
+  const signal = new AbortController().signal;
+  const answer = (body: unknown, status = 200) => vi.fn(async () => Response.json(body, { status }));
+
+  it("shows the entries of /api/search with their number as the reference", async () => {
+    const request = answer({ results: [{ ref: "LB-12", title: "Laptop budget", kind: "Decision", href: "/e/LB-12" }] });
+    await expect(findEntries(" laptop ", signal, request)).resolves.toEqual([
+      { href: "/e/LB-12", title: "Laptop budget", reference: "LB-12", kind: "Decision" },
+    ]);
+    expect(request).toHaveBeenCalledWith("/api/search?q=laptop", { signal });
+  });
+
+  it("asks the server from two characters on, or for one digit", async () => {
+    const request = answer({ results: [] });
+    await expect(findEntries("l", signal, request)).resolves.toEqual([]);
+    await expect(findEntries(" ", signal, request)).resolves.toEqual([]);
+    expect(request).not.toHaveBeenCalled();
+    await findEntries("7", signal, request);
+    await findEntries("la", signal, request);
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails when the search does not answer, so the frame says so", async () => {
+    await expect(findEntries("laptop", signal, answer({ error: "unauthorized" }, 401))).rejects.toThrow("401");
   });
 });

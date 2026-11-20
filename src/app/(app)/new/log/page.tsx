@@ -1,8 +1,8 @@
+import { PageHeader } from "@meldgrove/ui/page";
 import type { Metadata } from "next";
 import { logEntryAction } from "@/app/(app)/entry-actions";
 import { LogForm } from "@/components/entries/log-form";
 import { NoTeamsNotice } from "@/components/entries/no-teams-notice";
-import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { getDirectory } from "@/lib/directory/directory";

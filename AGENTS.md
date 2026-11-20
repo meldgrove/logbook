@@ -22,8 +22,11 @@ Meldgrove apps, Radix), sonner, pino, Vitest, Playwright.
   (`@meldgrove/ui/updates`; the provider for admins sits in
   `src/app/(app)/layout.tsx` and calls `/api/admin/updates`). Use them for
   every control, list, and panel. Change or add components in the package,
-  not here. The app shell (sidebar, header, breadcrumb) follows
-  `src/lib/navigation.ts`.
+  not here. The frame (sidebar, search, header, breadcrumbs, user menu,
+  keys) is `AppFrame` from `@meldgrove/ui/app-frame` in
+  `src/components/logbook-frame.tsx`; its items and breadcrumbs come from
+  `src/lib/navigation.ts`. Pages use `Page` and `PageHeader` from
+  `@meldgrove/ui/page`.
 - `src/lib/<module>/`: `auth`, `directory` (manual and Keycloak directory),
   `db`, `entries`, `process`, `calendar`, `audit`, `health`, `jobs`,
   `security`, `notifications`, `measures`, `webhooks`, `csv-import`,

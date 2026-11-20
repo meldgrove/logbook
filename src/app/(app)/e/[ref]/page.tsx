@@ -1,5 +1,6 @@
 import { Button } from "@meldgrove/ui/button";
 import { Card, CardContent } from "@meldgrove/ui/card";
+import { PageHeader } from "@meldgrove/ui/page";
 import { History, Pencil } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -7,7 +8,6 @@ import { notFound } from "next/navigation";
 import { Addenda, EntryBadges, EntryFacts, Fact, SupersedeNotes } from "@/components/entries/entry-parts";
 import { ProposalPage } from "@/components/proposals/proposal-page";
 import { Markdown } from "@/components/markdown";
-import { PageHeader } from "@/components/page-header";
 import { getFormatter, requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { canAddAddendum, canChangeImpact } from "@/lib/entries/commands";
@@ -57,39 +57,40 @@ export default async function EntryPage({ params }: PageProps<"/e/[ref]">) {
 
   return (
     <article className="flex max-w-3xl flex-col gap-6">
-      <PageHeader
-        title={entry.title}
-        eyebrow={
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <EntryBadges type={entry.type} impact={entry.impact} reversibility={decision?.reversibility} superseded={Boolean(entry.supersededBy)} />
-            <span className="text-xs text-muted-foreground tabular-nums">{formatEntryRef(entry.number)}</span>
-          </div>
-        }
-        description={
-          <>
-            {entry.teamName} · by {entry.authorName} · {fmt.published(entry.publishedAt, entry.imported)}
-            {entry.editedAt ? ` · edited ${fmt.dateTime(entry.editedAt)}` : null}
-          </>
-        }
-        actions={
-          <>
-            {mayEdit ? (
-              <Button asChild size="sm" variant="outline">
-                <Link href={`${entryPath(entry.number)}/edit`}>
-                  <Pencil aria-hidden="true" />
-                  Edit
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <EntryBadges type={entry.type} impact={entry.impact} reversibility={decision?.reversibility} superseded={Boolean(entry.supersededBy)} />
+          <span className="text-xs text-muted-foreground tabular-nums">{formatEntryRef(entry.number)}</span>
+        </div>
+        <PageHeader
+          // An entry's title wraps; the package's header keeps a title on one line.
+          title={<span className="whitespace-normal wrap-anywhere">{entry.title}</span>}
+          description={
+            <>
+              {entry.teamName} · by {entry.authorName} · {fmt.published(entry.publishedAt, entry.imported)}
+              {entry.editedAt ? ` · edited ${fmt.dateTime(entry.editedAt)}` : null}
+            </>
+          }
+          actions={
+            <>
+              {mayEdit ? (
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`${entryPath(entry.number)}/edit`}>
+                    <Pencil aria-hidden="true" />
+                    Edit
+                  </Link>
+                </Button>
+              ) : null}
+              <Button asChild size="sm" variant="ghost">
+                <Link href={`${entryPath(entry.number)}/history`}>
+                  <History aria-hidden="true" />
+                  History
                 </Link>
               </Button>
-            ) : null}
-            <Button asChild size="sm" variant="ghost">
-              <Link href={`${entryPath(entry.number)}/history`}>
-                <History aria-hidden="true" />
-                History
-              </Link>
-            </Button>
-          </>
-        }
-      />
+            </>
+          }
+        />
+      </div>
 
       <SupersedeNotes entry={entry} />
 

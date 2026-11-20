@@ -1,8 +1,8 @@
+import { PageHeader } from "@meldgrove/ui/page";
 import type { Metadata } from "next";
 import { saveDraftAction } from "@/app/(app)/proposal-actions";
 import { NoTeamsNotice } from "@/components/entries/no-teams-notice";
 import { ProposalForm } from "@/components/proposals/proposal-form";
-import { PageHeader } from "@/components/page-header";
 import { getFormatter, requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { getDirectory } from "@/lib/directory/directory";
