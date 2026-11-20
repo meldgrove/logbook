@@ -21,7 +21,8 @@ meetings.
   reminders before deadlines, and one Slack channel post per new entry.
 - **Webhook**: published entries are posted as signed JSON, for example to a
   search index or a knowledge base.
-- **Personal preferences**: everyone chooses their time zone and date format.
+- **Personal preferences**: everyone chooses their time zone and date
+  format, and light or dark appearance.
 - **Updates**: new releases install automatically, or with one click on the
   admins' update button; a Preview channel brings changes before they are
   released.

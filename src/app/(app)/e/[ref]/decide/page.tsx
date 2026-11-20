@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@meldgrove/ui/card";
 import { Input } from "@meldgrove/ui/input";
 import { Item, ItemHeader } from "@meldgrove/ui/item";
+import { PageHeader } from "@meldgrove/ui/page";
 import { Check, X } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -10,7 +11,6 @@ import { ActionForm } from "@/components/form/action-form";
 import { Field } from "@/components/form/field";
 import { MarkdownField } from "@/components/form/markdown-field";
 import { PersonalDataField } from "@/components/form/personal-data-field";
-import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { SUMMARY_MAX } from "@/lib/entries/constants";
@@ -36,8 +36,8 @@ export default async function DecidePage({ params }: PageProps<"/e/[ref]/decide"
     <div className="flex max-w-3xl flex-col gap-8">
       <PageHeader
         title="Decide"
-        eyebrow={
-          <Link className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground" href={entryPath(entry.number)}>
+        description={
+          <Link className="underline underline-offset-4 hover:text-foreground" href={entryPath(entry.number)}>
             {formatEntryRef(entry.number)}: {entry.title}
           </Link>
         }

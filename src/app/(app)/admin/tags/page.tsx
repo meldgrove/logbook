@@ -1,9 +1,9 @@
 import { Badge } from "@meldgrove/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@meldgrove/ui/card";
+import { PageHeader } from "@meldgrove/ui/page";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@meldgrove/ui/table";
 import type { Metadata } from "next";
 import { TagActiveForm, TagNameForm } from "@/components/entries/tag-forms";
-import { PageHeader } from "@/components/page-header";
 import { requireAdmin } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { listTagsWithUsage } from "@/lib/entries/queries";

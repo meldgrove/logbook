@@ -172,7 +172,7 @@ function ImpactControl({ entry }: { entry: EntryDetail }) {
 export async function Addenda({ entry, mayAddAddendum }: { entry: EntryDetail; mayAddAddendum: boolean }) {
   const fmt = await getFormatter();
   return (
-    <section id="addenda" aria-labelledby="addenda-heading" className="flex flex-col gap-4 border-t pt-6">
+    <section id="addenda" aria-labelledby="addenda-heading" className="flex scroll-mt-14 flex-col gap-4 border-t pt-6">
       <h2 id="addenda-heading" className="text-lg font-semibold">
         Addenda
       </h2>

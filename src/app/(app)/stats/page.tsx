@@ -1,6 +1,6 @@
+import { PageHeader } from "@meldgrove/ui/page";
 import type { Metadata } from "next";
 import { MonthlyStatistics } from "@/components/measures/monthly-statistics";
-import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { getMonthlyStatistics } from "@/lib/measures/queries";
