@@ -1,36 +1,33 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { connectTestDatabase } from "../../../tests/integration/db";
+import { connectInterceptedDatabase, connectTestDatabase } from "../../../tests/integration/db";
 import { startFakeOidcProvider, type FakeOidcProvider, type OidcIdentity } from "../../../tests/integration/oidc-provider";
-import { signInAction, signOutAction } from "@/app/actions";
-import { GET as oidcCallback } from "@/app/api/auth/callback/oidc/route";
-import * as config from "@/lib/config";
-import * as database from "@/lib/db/client";
+import type { AuthConfig } from "@/lib/config";
 import { authAccount, authSession, person } from "@/lib/db/schema";
 import { createManualDirectory } from "@/lib/directory/manual";
 import { endSessionsForSubjects } from "@/lib/directory/sessions";
 import { logger } from "@/lib/logger";
 import * as access from "./access";
-import { createAuth, type Auth } from "./auth";
-import { getCurrentPerson } from "./session";
+import { createLogbookAuth, type CreateAuthOptions, type LogbookAuth } from "./auth";
 
-// session.ts reads the request's cookies through next/headers.
-const request = vi.hoisted(() => ({
-  headers: new Headers(),
-  redirect: vi.fn((_url: string): never => { throw new Error("redirect"); }),
+// Better Auth's nextCookies() plugin sets cookies through next/headers, as in
+// the sign-in Server Action; the browser sends them with its next request.
+const browser = vi.hoisted(() => ({ cookies: new Map<string, string>() }));
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers(),
+  cookies: async () => ({ set: (name: string, value: string) => browser.cookies.set(name, value) }),
 }));
-vi.mock("next/headers", () => ({ headers: async () => request.headers }));
-vi.mock("next/navigation", () => ({ redirect: request.redirect }));
 
 const BASE_URL = "http://localhost:3000";
 const testDb = connectTestDatabase();
 const { db } = testDb;
 let provider: FakeOidcProvider;
-let auth: Auth;
+let options: CreateAuthOptions;
+let auth: LogbookAuth;
 
 beforeAll(async () => {
   provider = await startFakeOidcProvider();
-  const authConfig = {
+  const config: AuthConfig = {
     LOGBOOK_BASE_URL: BASE_URL,
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret",
     OIDC_ISSUER: provider.issuer,
@@ -39,19 +36,12 @@ beforeAll(async () => {
     OIDC_SCOPES: "openid email profile",
     OIDC_TRUST_EMAIL: false,
   };
-  vi.spyOn(config, "getAuthConfig").mockReturnValue(authConfig);
-  auth = createAuth({
-    config: authConfig,
-    directory: createManualDirectory({ initialAdmins: [] }),
-    db,
-  });
-  // The auth that session.ts uses.
-  (globalThis as { logbookAuth?: Auth }).logbookAuth = auth;
+  options = { config, directory: createManualDirectory({ initialAdmins: [] }), db };
+  auth = createLogbookAuth(options);
 });
 beforeEach(() => testDb.reset());
 afterAll(async () => {
   await provider.close();
-  await database.getPool().end();
   await testDb.close();
 });
 
@@ -64,30 +54,28 @@ function cookiesOf(response: Response): string {
     .join("; ");
 }
 
-/** Logs in through Better Auth's endpoints like a browser, with the fake provider approving `identity`. */
+/** The headers of a request from a browser with these cookies. */
+const withCookie = (cookie: string) => new Headers({ origin: BASE_URL, cookie });
+
+/** Logs in like a browser: the sign-in action, the fake provider approving `identity`, and the callback. */
 async function logIn(identity: OidcIdentity) {
-  const start = await auth.handler(
-    new Request(`${BASE_URL}/api/auth/sign-in/social`, {
-      method: "POST",
-      headers: { "content-type": "application/json", origin: BASE_URL },
-      body: JSON.stringify({ provider: "oidc", callbackURL: "/" }),
-    }),
-  );
-  expect(start.status).toBe(200);
-  const { url } = (await start.json()) as { url: string };
+  browser.cookies.clear();
+  const url = await auth.signInUrl(withCookie(""));
   const authorization = new URL(url);
+  expect(authorization.origin).toBe(new URL(provider.issuer).origin);
   const code = provider.approve(url, identity);
   const callback = new URL(authorization.searchParams.get("redirect_uri")!);
   callback.searchParams.set("code", code);
   callback.searchParams.set("state", authorization.searchParams.get("state")!);
-  const response = await oidcCallback(new Request(callback, { headers: { cookie: cookiesOf(start) } }));
+  const sent = [...browser.cookies].filter(([, value]) => value).map(([name, value]) => `${name}=${value}`).join("; ");
+  const response = await auth.callback(new Request(callback, { headers: { cookie: sent } }));
   return { response, cookie: cookiesOf(response), code };
 }
 
-/** The person `getCurrentPerson` finds for a request with these cookies. */
+/** The person whose session the cookies carry, while it is active. */
 async function personFor(cookie: string) {
-  request.headers = new Headers({ cookie });
-  return getCurrentPerson();
+  const session = await auth.requestSession(withCookie(cookie));
+  return session.status === "active" ? session.person : null;
 }
 
 async function addPerson(values: Partial<typeof person.$inferInsert>) {
@@ -95,28 +83,49 @@ async function addPerson(values: Partial<typeof person.$inferInsert>) {
   return row!;
 }
 
+/** What a directory sync does when a subject moves to another person: the old sessions end. */
+async function moveSubject(from: { id: string }, subject: string) {
+  await db.transaction(async (tx) => {
+    await tx.update(person).set({ oidcSubject: null }).where(eq(person.id, from.id));
+    await tx.insert(person).values({ displayName: "New owner", oidcSubject: subject, hasAccess: true, isAdmin: true });
+    await endSessionsForSubjects(tx, [subject]);
+  });
+}
+
+/** Sessions whose database fails the first `statement`, with "diagnostic details" as the error. */
+function withFailing(statement: RegExp) {
+  let failed = false;
+  const failing = connectInterceptedDatabase((sql) => {
+    if (failed || !statement.test(sql)) return;
+    failed = true;
+    throw new Error("diagnostic details");
+  });
+  return { auth: createLogbookAuth({ ...options, db: failing.db }), close: failing.close };
+}
+
 describe("login with the OIDC provider", () => {
-  it("omits Better Auth diagnostics from application logs", async () => {
+  it("logs Better Auth diagnostics without their details", async () => {
     const log = vi.spyOn(logger, "error");
     try {
-      const context = await auth.$context;
-      context.logger.error("provider response details", { detail: "diagnostic data" });
+      const response = await auth.callback(new Request(`${BASE_URL}/api/auth/callback/oidc?code=forged&state=forged`));
 
+      expect(response.headers.get("location")).toBe(`${BASE_URL}/login?error=state_mismatch`);
       expect(log.mock.calls).toEqual([["Better Auth reported an event"]]);
     } finally {
       log.mockRestore();
     }
   });
 
-  it("redirects to a generic error when sign-in cannot start", async () => {
-    const start = vi.spyOn(auth.api, "signInSocial").mockRejectedValueOnce(new Error("diagnostic details"));
+  it("returns a generic error when sign-in cannot start", async () => {
+    const unavailable = createLogbookAuth({ ...options, config: { ...options.config, OIDC_ISSUER: `${provider.issuer}/missing` } });
     const log = vi.spyOn(logger, "error");
     try {
-      await expect(signInAction()).rejects.toThrow("redirect");
-      expect(request.redirect).toHaveBeenLastCalledWith("/login?error=OIDC_SIGN_IN_FAILED");
-      expect(log.mock.calls).toEqual([["Could not start OIDC sign-in"]]);
+      expect(await unavailable.signInUrl(withCookie(""))).toBe("/login?error=OIDC_SIGN_IN_FAILED");
+      expect(log).toHaveBeenLastCalledWith("Could not start OIDC sign-in");
+      // Better Auth's own reports of the failure arrive without their details.
+      const reports = log.mock.calls.slice(0, -1);
+      expect(reports).toEqual(reports.map(() => ["Better Auth reported an event"]));
     } finally {
-      start.mockRestore();
       log.mockRestore();
     }
   });
@@ -160,20 +169,15 @@ describe("login with the OIDC provider", () => {
     expect(await personFor(second.cookie)).toBeNull();
   });
 
-  it("rejects an in-flight session when its admitted person loses the subject", async () => {
+  it("rejects an in-flight login when its admitted person loses the subject", async () => {
     const subject = "sub-ada";
     const ada = await addPerson({ oidcSubject: subject });
     const { cookie } = await logIn({ sub: subject, email: "ada@example.org" });
-    const stale = await auth.api.getSession({ headers: new Headers({ cookie }) });
 
     const admitLogin = access.admitLogin;
     const admission = vi.spyOn(access, "admitLogin").mockImplementationOnce(async (...args) => {
       const personId = await admitLogin(...args);
-      await db.transaction(async (tx) => {
-        await tx.update(person).set({ oidcSubject: null }).where(eq(person.id, ada.id));
-        await tx.insert(person).values({ displayName: "New owner", oidcSubject: subject, hasAccess: true, isAdmin: true });
-        await endSessionsForSubjects(tx, [subject]);
-      });
+      await moveSubject(ada, subject);
       return personId;
     });
     try {
@@ -183,25 +187,54 @@ describe("login with the OIDC provider", () => {
     } finally {
       admission.mockRestore();
     }
+    expect(await personFor(cookie)).toBeNull();
+    expect(await db.select().from(authSession)).toHaveLength(0);
+  });
 
-    // A request whose cookie lookup preceded the sync still checks the live row.
-    const sessionLookup = vi.spyOn(auth.api, "getSession").mockResolvedValueOnce(stale);
+  it("checks the live session row when a sync ends it while the request reads it", async () => {
+    const subject = "sub-ada";
+    const ada = await addPerson({ oidcSubject: subject });
+    const { cookie } = await logIn({ sub: subject, email: "ada@example.org" });
+
+    // The sync runs after the cookie lookup and before the person lookup.
+    let moved = false;
+    const racing = connectInterceptedDatabase(async (sql) => {
+      if (!moved && sql.includes('inner join "person"')) {
+        moved = true;
+        await moveSubject(ada, subject);
+      }
+    });
     try {
-      expect(await personFor(cookie)).toBeNull();
+      const session = await createLogbookAuth({ ...options, db: racing.db }).requestSession(withCookie(cookie));
+      expect(moved).toBe(true);
+      expect(session).toEqual({ status: "ended" });
     } finally {
-      sessionLookup.mockRestore();
+      await racing.close();
     }
     expect(await db.select().from(authSession)).toHaveLength(0);
   });
 
+  it("ends a session whose person lost access when it is read", async () => {
+    const ada = await addPerson({ oidcSubject: "sub-ada" });
+    const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
+    // Taken away without ending the session, as in a race with the directory.
+    await db.update(person).set({ hasAccess: false }).where(eq(person.id, ada.id));
+
+    expect(await auth.requestSession(withCookie(cookie))).toEqual({ status: "ended" });
+    expect(await db.select().from(authSession)).toHaveLength(0);
+    expect(await auth.requestSession(withCookie(cookie))).toEqual({ status: "none" });
+  });
+
   it("keeps session lookup error details out of protected requests", async () => {
-    const lookup = vi.spyOn(auth.api, "getSession").mockRejectedValueOnce(new Error("diagnostic details"));
+    await addPerson({ oidcSubject: "sub-ada" });
+    const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
+    const failing = withFailing(/^select\b[\s\S]*\bfrom "auth_session"/);
     try {
-      const result = personFor("");
+      const result = failing.auth.requestSession(withCookie(cookie));
       await expect(result).rejects.toThrow("Could not read the Logbook session");
       await expect(result).rejects.not.toHaveProperty("cause");
     } finally {
-      lookup.mockRestore();
+      await failing.close();
     }
   });
 
@@ -210,7 +243,7 @@ describe("login with the OIDC provider", () => {
     const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
     await db.update(authSession).set({ oidcPersonId: null });
 
-    expect(await personFor(cookie)).toBeNull();
+    expect(await auth.requestSession(withCookie(cookie))).toEqual({ status: "none" });
     const fresh = await logIn({ sub: "sub-ada", email: "ada@example.org" });
     expect(await personFor(fresh.cookie)).toMatchObject({ oidcSubject: "sub-ada" });
   });
@@ -252,9 +285,10 @@ describe("login with the OIDC provider", () => {
     const ada = await logIn({ sub: "sub-ada", email: "shared@example.org" });
     const bea = await logIn({ sub: "sub-bea", email: "shared@example.org" });
 
-    request.headers = new Headers({ cookie: ada.cookie });
-    await expect(signOutAction()).rejects.toThrow("redirect");
-    const logoutUrl = new URL(request.redirect.mock.lastCall![0]);
+    const logoutUrl = new URL(await auth.signOutUrl(withCookie(ada.cookie)));
+    expect(logoutUrl.origin).toBe(new URL(provider.issuer).origin);
+    expect(logoutUrl.searchParams.get("client_id")).toBe(provider.clientId);
+    expect(logoutUrl.searchParams.get("post_logout_redirect_uri")).toBe(`${BASE_URL}/`);
     expect(logoutUrl.searchParams.get("id_token_hint")).toBe(provider.tokensFor(ada.code)?.idToken);
     expect(await personFor(ada.cookie)).toBeNull();
     expect(await personFor(bea.cookie)).toMatchObject({ oidcSubject: "sub-bea" });
@@ -263,36 +297,29 @@ describe("login with the OIDC provider", () => {
   it("ends the local session and reaches provider logout when the session lookup fails", async () => {
     await addPerson({ oidcSubject: "sub-ada" });
     const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
-    request.headers = new Headers({ cookie });
-    const lookup = vi.spyOn(auth.api, "getSession").mockRejectedValueOnce(new Error("session lookup failed"));
+    const failing = withFailing(/^select\b[\s\S]*\bfrom "auth_session"/);
 
     try {
-      await expect(signOutAction()).rejects.toThrow("redirect");
-      expect(lookup).toHaveBeenCalledWith({
-        headers: request.headers,
-        query: { disableRefresh: true },
-      });
-      const logoutUrl = new URL(request.redirect.mock.lastCall![0]);
+      const logoutUrl = new URL(await failing.auth.signOutUrl(withCookie(cookie)));
       expect(logoutUrl.origin).toBe(new URL(provider.issuer).origin);
       expect(logoutUrl.searchParams.has("id_token_hint")).toBe(false);
       expect(await db.select().from(authSession)).toHaveLength(0);
     } finally {
-      lookup.mockRestore();
+      await failing.close();
     }
   });
 
   it("returns to login after local sign-out when the provider token cannot be read", async () => {
     await addPerson({ oidcSubject: "sub-ada" });
     const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
-    request.headers = new Headers({ cookie });
-    const getDb = vi.spyOn(database, "getDb").mockImplementationOnce(() => { throw new Error("database unavailable"); });
+    // Logbook's lookup of the ID token, by the session's subject and person.
+    const failing = withFailing(/\bfrom "auth_account" inner join "person"/);
 
     try {
-      await expect(signOutAction()).rejects.toThrow("redirect");
-      expect(request.redirect).toHaveBeenLastCalledWith("/login");
+      expect(await failing.auth.signOutUrl(withCookie(cookie))).toBe("/login");
       expect(await personFor(cookie)).toBeNull();
     } finally {
-      getDb.mockRestore();
+      await failing.close();
     }
   });
 

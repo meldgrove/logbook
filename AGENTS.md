@@ -39,6 +39,11 @@ Meldgrove apps, Radix), sonner, pino, Vitest, Playwright.
 - Every page, Server Action, and route handler calls `requireUser()` or
   `requireAdmin()` from `src/lib/auth/session.ts`. Layouts do not re-render
   on navigation, so a check in a layout is not enough.
+- Sign-in, the OIDC callback, the session behind a request, and sign-out go
+  through `getLogbookAuth()` in `src/lib/auth/auth.ts`; nothing else calls
+  Better Auth. Reading a session can end it: when its person lost access or
+  the OIDC subject, `requestSession` deletes it and `requireUser()` shows
+  `/no-access`.
 - Never delete Logbook data. The only exceptions are unsubmitted drafts and
   Better Auth sessions. Triggers in `drizzle/0001_no_deletion.sql` enforce it,
   and the audit log is append-only. People who leave lose access; teams and

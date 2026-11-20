@@ -35,6 +35,10 @@ export default defineConfig({
           hookTimeout: 60_000,
           testTimeout: 30_000,
           env: { NODE_ENV: "test", TZ, DATABASE_URL: testDatabaseUrl, TEST_DATABASE_URL: testDatabaseUrl },
+          // Better Auth's nextCookies() plugin sets cookies through
+          // next/headers. Inlined, it gets the tests' next/headers mock, so
+          // sign-in tests receive the cookies a Server Action would set.
+          server: { deps: { inline: ["better-auth"] } },
         },
       },
     ],

@@ -3,41 +3,75 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
-import { DrizzleQueryError } from "drizzle-orm";
+import { and, DrizzleQueryError, eq } from "drizzle-orm";
 import { DatabaseError } from "pg";
 import { getAuthConfig, type AuthConfig } from "@/lib/config";
 import { getDb, type Database } from "@/lib/db/client";
-import { authAccount, authSession, authUser, authVerification } from "@/lib/db/schema";
+import { authAccount, authSession, authUser, authVerification, person } from "@/lib/db/schema";
 import { getDirectory, type Directory } from "@/lib/directory/directory";
+import type { PersonRow } from "@/lib/directory/queries";
 import { OIDC_PROVIDER_ID } from "@/lib/directory/sessions";
 import { logger } from "@/lib/logger";
 import { admitLogin, NO_ACCESS_ERROR_CODE, type Login } from "./access";
 import { discoveryUrl } from "./discovery-url";
+import { getOidcEndpoints } from "./oidc-discovery";
+
+/*
+ * Logbook's sessions: sign-in at the OIDC provider, the provider's callback,
+ * the person behind a request, and sign-out. Better Auth does the protocol
+ * work behind this module; nothing else calls it. Its account and session
+ * APIs act on the shared Better Auth user, while Logbook grants access by OIDC
+ * subject: each session belongs to the person admitted for the `sub` it
+ * logged in with, and counts only while that person still owns the `sub`.
+ */
+
+/** The session behind a request. */
+export type RequestSession =
+  /** No session, or one from before sessions were bound to a person: sign in again. */
+  | { status: "none" }
+  /**
+   * The session's person lost access or the OIDC subject after login (the
+   * directory normally ends these sessions first). Reading it ended it.
+   */
+  | { status: "ended" }
+  | { status: "active"; userId: string; person: PersonRow };
+
+export interface LogbookAuth {
+  /**
+   * Where to send the browser to sign in: the provider's authorization URL,
+   * or `/login?error=OIDC_SIGN_IN_FAILED` when sign-in cannot start. Logs no
+   * details of the failure.
+   */
+  signInUrl(headers: Headers): Promise<string>;
+  /**
+   * Answers the provider's callback (GET, or POST for form_post). An
+   * admitted login gets a session cookie; Logbook's own denials redirect to
+   * `/login?error=...`. Never throws: an unexpected failure redirects to
+   * `/login?error=OIDC_CALLBACK_FAILED` and is logged without details.
+   */
+  callback(request: Request): Promise<Response>;
+  /**
+   * The session of the request's cookies and the person bound to it. Reading
+   * can end the session: when its person lost access or the OIDC subject, the
+   * session is deleted and the status is `ended`. A failed lookup throws
+   * "Could not read the Logbook session", without the cause.
+   */
+  requestSession(headers: Headers): Promise<RequestSession>;
+  /**
+   * Ends the request's session, then returns where to send the browser: the
+   * provider's logout (RP-initiated, with the ID token of the session's own
+   * `sub` as `id_token_hint` when it can be read), or `/login` without a
+   * logout endpoint or when the token lookup fails. The provider logout
+   * still happens when the session cannot be read first; a failed local
+   * sign-out throws.
+   */
+  signOutUrl(headers: Headers): Promise<string>;
+}
 
 export interface CreateAuthOptions {
   config: AuthConfig;
   directory: Directory;
   db: Database;
-}
-
-/**
- * The OIDC `sub` each login verified, by Better Auth endpoint context. The
- * OAuth callback writes the account row of that `sub` and then creates the
- * session, both in one request. The user ID alone does not say who logged in:
- * Better Auth links a new `sub` whose verified email matches an existing user
- * to that user.
- */
-const loginAccounts = new WeakMap<object, { userId: string; subject: string }>();
-const loginProfiles = new WeakMap<object, Omit<Login, "subject">>();
-
-function rememberLoginAccount(context: object | null, account: { providerId: string; accountId: string; userId: string } | null) {
-  if (!context || account?.providerId !== OIDC_PROVIDER_ID) return;
-  loginAccounts.set(context, { userId: account.userId, subject: account.accountId });
-}
-
-function loginSubjectOf(context: object | null, userId: string): string | undefined {
-  const login = context ? loginAccounts.get(context) : undefined;
-  return login?.userId === userId ? login.subject : undefined;
 }
 
 function noAccessError() {
@@ -53,7 +87,27 @@ function noAccessError() {
  * provider's discovery document. Sessions live in PostgreSQL and are read on
  * every request, so ending a session takes effect immediately.
  */
-export function createAuth({ config, directory, db }: CreateAuthOptions) {
+function createAuth({ config, directory, db }: CreateAuthOptions) {
+  /**
+   * The OIDC `sub` each login verified, by Better Auth endpoint context. The
+   * OAuth callback writes the account row of that `sub` and then creates the
+   * session, both in one request. The user ID alone does not say who logged in:
+   * Better Auth links a new `sub` whose verified email matches an existing user
+   * to that user.
+   */
+  const loginAccounts = new WeakMap<object, { userId: string; subject: string }>();
+  const loginProfiles = new WeakMap<object, Omit<Login, "subject">>();
+
+  function rememberLoginAccount(context: object | null, account: { providerId: string; accountId: string; userId: string } | null) {
+    if (!context || account?.providerId !== OIDC_PROVIDER_ID) return;
+    loginAccounts.set(context, { userId: account.userId, subject: account.accountId });
+  }
+
+  function loginSubjectOf(context: object | null, userId: string): string | undefined {
+    const login = context ? loginAccounts.get(context) : undefined;
+    return login?.userId === userId ? login.subject : undefined;
+  }
+
   return betterAuth({
     appName: "Logbook",
     baseURL: config.LOGBOOK_BASE_URL,
@@ -118,8 +172,8 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
       cookiePrefix: "logbook",
       useSecureCookies: config.LOGBOOK_BASE_URL.startsWith("https://"),
     },
-    // Let Logbook's callback route handle unexpected errors before the HTTP
-    // router can write the exception directly to the console.
+    // Let the callback handle unexpected errors before the HTTP router can
+    // write the exception directly to the console.
     onAPIError: { errorURL: `${config.LOGBOOK_BASE_URL}/login`, throw: true },
     databaseHooks: {
       account: {
@@ -171,11 +225,107 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
   });
 }
 
-export type Auth = ReturnType<typeof createAuth>;
+/** Checks the live session and its person binding in one database snapshot. */
+async function findPersonForSession(db: Database, sessionId: string): Promise<PersonRow | undefined> {
+  const [row] = await db.select({ person }).from(authSession)
+    .innerJoin(person, and(eq(person.id, authSession.oidcPersonId), eq(person.oidcSubject, authSession.oidcSubject)))
+    .where(eq(authSession.id, sessionId));
+  return row?.person;
+}
 
-const globalForAuth = globalThis as unknown as { logbookAuth?: Auth };
+/** Logbook's sessions for one configuration, provider, directory, and database. */
+export function createLogbookAuth(options: CreateAuthOptions): LogbookAuth {
+  const { config, db } = options;
+  const auth = createAuth(options);
+  return {
+    async signInUrl(headers) {
+      try {
+        const result = await auth.api.signInSocial({
+          body: { provider: OIDC_PROVIDER_ID, callbackURL: "/", errorCallbackURL: "/login" },
+          headers,
+        });
+        if (!result.url) throw new Error("Better Auth returned no authorization URL");
+        return result.url;
+      } catch {
+        logger.error("Could not start OIDC sign-in");
+        return "/login?error=OIDC_SIGN_IN_FAILED";
+      }
+    },
 
-export function getAuth(): Auth {
-  globalForAuth.logbookAuth ??= createAuth({ config: getAuthConfig(), directory: getDirectory(), db: getDb() });
-  return globalForAuth.logbookAuth;
+    async callback(request) {
+      try {
+        return await auth.handler(request);
+      } catch {
+        logger.error("OIDC callback failed");
+        return new Response(null, {
+          status: 303,
+          headers: { Location: "/login?error=OIDC_CALLBACK_FAILED", "Cache-Control": "no-store" },
+        });
+      }
+    },
+
+    async requestSession(headers) {
+      const session = await auth.api.getSession({ headers }).catch(() => {
+        // Better Auth logs at the auth boundary. Keep the request failure without
+        // forwarding a database error cause to Next.js or error reporting.
+        throw new Error("Could not read the Logbook session");
+      });
+      if (!session?.session.oidcPersonId) return { status: "none" };
+      // The person bound at sign-in, while it still owns the OIDC subject.
+      const found = await findPersonForSession(db, session.session.id);
+      if (!found?.hasAccess) {
+        // Access ended after login (the sync normally ends these sessions first).
+        await db.delete(authSession).where(eq(authSession.id, session.session.id));
+        return { status: "ended" };
+      }
+      return { status: "active", userId: session.user.id, person: found };
+    },
+
+    async signOutUrl(headers) {
+      const session = await auth.api.getSession({
+        headers,
+        query: { disableRefresh: true },
+      }).catch(() => {
+        logger.warn("Could not read the session for provider logout");
+        return null;
+      });
+      await auth.api.signOut({ headers });
+
+      const endSession = (await getOidcEndpoints(config.OIDC_ISSUER))?.endSessionEndpoint;
+      if (!endSession) return "/login";
+      const logoutUrl = new URL(endSession);
+      logoutUrl.searchParams.set("client_id", config.OIDC_CLIENT_ID);
+      logoutUrl.searchParams.set("post_logout_redirect_uri", `${config.LOGBOOK_BASE_URL}/`);
+      if (session?.session.oidcPersonId) {
+        // The shared Better Auth user may have several OIDC subjects. Use only
+        // the token for the subject that started this Logbook session.
+        try {
+          const [account] = await db
+            .select({ idToken: authAccount.idToken })
+            .from(authAccount)
+            .innerJoin(person, eq(person.oidcSubject, authAccount.accountId))
+            .where(and(
+              eq(authAccount.providerId, OIDC_PROVIDER_ID),
+              eq(authAccount.accountId, session.session.oidcSubject),
+              eq(person.id, session.session.oidcPersonId),
+            ));
+          if (account?.idToken) logoutUrl.searchParams.set("id_token_hint", account.idToken);
+        } catch {
+          logger.warn("Could not read the provider logout token");
+          return "/login";
+        }
+      }
+      return logoutUrl.toString();
+    },
+  };
+}
+
+// Not `logbookAuth`: a development server may still hold the Better Auth
+// instance that earlier versions kept under that key.
+const globalForAuth = globalThis as unknown as { logbookSessions?: LogbookAuth };
+
+/** This process's sessions, for the configured provider and directory. */
+export function getLogbookAuth(): LogbookAuth {
+  globalForAuth.logbookSessions ??= createLogbookAuth({ config: getAuthConfig(), directory: getDirectory(), db: getDb() });
+  return globalForAuth.logbookSessions;
 }

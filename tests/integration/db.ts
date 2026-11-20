@@ -31,3 +31,21 @@ export function connectTestDatabase(): TestDatabase {
     close: () => pool.end(),
   };
 }
+
+/**
+ * Its own connections to the test database, which show each statement's SQL
+ * to `intercept` before running it (statements outside transactions).
+ * Throwing fails the statement, as an unavailable database would; awaiting a
+ * change on another connection plays a concurrent write.
+ */
+export function connectInterceptedDatabase(intercept: (sql: string) => void | Promise<void>): Pick<TestDatabase, "db" | "close"> {
+  const connectionString = process.env.TEST_DATABASE_URL;
+  if (!connectionString) throw new Error("TEST_DATABASE_URL is not set");
+  const pool = new Pool({ connectionString, max: 2 });
+  const query = pool.query.bind(pool) as (config: string | { text: string }, ...rest: unknown[]) => Promise<unknown>;
+  pool.query = (async (config: string | { text: string }, ...rest: unknown[]) => {
+    await intercept(typeof config === "string" ? config : config.text);
+    return query(config, ...rest);
+  }) as unknown as typeof pool.query;
+  return { db: createDb(pool), close: () => pool.end() };
+}
