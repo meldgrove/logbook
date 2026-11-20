@@ -62,7 +62,8 @@ export interface LogbookAuth {
    * provider's logout (RP-initiated, with the ID token of the session's own
    * `sub` as `id_token_hint` when it can be read), or `/login` without a
    * logout endpoint or when the token lookup fails. The provider logout
-   * still happens when the session cannot be read first.
+   * still happens when the session cannot be read first; a failed local
+   * sign-out throws.
    */
   signOutUrl(headers: Headers): Promise<string>;
 }
@@ -86,7 +87,7 @@ function noAccessError() {
  * provider's discovery document. Sessions live in PostgreSQL and are read on
  * every request, so ending a session takes effect immediately.
  */
-export function createAuth({ config, directory, db }: CreateAuthOptions) {
+function createAuth({ config, directory, db }: CreateAuthOptions) {
   /**
    * The OIDC `sub` each login verified, by Better Auth endpoint context. The
    * OAuth callback writes the account row of that `sub` and then creates the
@@ -224,8 +225,6 @@ export function createAuth({ config, directory, db }: CreateAuthOptions) {
   });
 }
 
-export type Auth = ReturnType<typeof createAuth>;
-
 /** Checks the live session and its person binding in one database snapshot. */
 async function findPersonForSession(db: Database, sessionId: string): Promise<PersonRow | undefined> {
   const [row] = await db.select({ person }).from(authSession)
@@ -234,12 +233,10 @@ async function findPersonForSession(db: Database, sessionId: string): Promise<Pe
   return row?.person;
 }
 
-/**
- * Logbook's sessions for one configuration. `auth` is the Better Auth
- * instance behind them; it defaults to one built from the same options.
- */
-export function createLogbookAuth(options: CreateAuthOptions, auth: Auth = createAuth(options)): LogbookAuth {
+/** Logbook's sessions for one configuration, provider, directory, and database. */
+export function createLogbookAuth(options: CreateAuthOptions): LogbookAuth {
   const { config, db } = options;
+  const auth = createAuth(options);
   return {
     async signInUrl(headers) {
       try {
