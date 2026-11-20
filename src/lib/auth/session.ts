@@ -1,14 +1,12 @@
-import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { getDb } from "@/lib/db/client";
-import { authSession } from "@/lib/db/schema";
-import { findPersonForSession, type PersonRow } from "@/lib/directory/queries";
+import type { PersonRow } from "@/lib/directory/queries";
 import { createDateFormatter, type DateFormatter } from "@/lib/format";
 import { recordActivity } from "@/lib/measures/activity";
 import { displayPreferences } from "@/lib/preferences";
-import { getAuth } from "./auth";
+import { getLogbookAuth, type RequestSession } from "./auth";
 
 export interface CurrentUser {
   userId: string;
@@ -16,25 +14,15 @@ export interface CurrentUser {
 }
 
 /**
- * Session and person for this request. Cached per request. The person is the
- * one bound to the session at sign-in, while it still owns the OIDC subject.
+ * The session behind this request, read once per request. Reading ends a
+ * session whose person lost access or the OIDC subject (`requestSession`).
  */
-const loadRequestUser = cache(async () => {
-  const requestHeaders = await headers();
-  const session = await getAuth().api.getSession({ headers: requestHeaders }).catch(() => {
-    // Better Auth logs at the auth boundary. Keep the request failure without
-    // forwarding a database error cause to Next.js or error reporting.
-    throw new Error("Could not read the Logbook session");
-  });
-  if (!session?.session.oidcPersonId) return null;
-  const person = await findPersonForSession(getDb(), session.session.id);
-  return { session, person };
-});
+const loadRequestSession = cache(async (): Promise<RequestSession> => getLogbookAuth().requestSession(await headers()));
 
 /** The person behind this request if they have access, without redirecting (for route handlers). */
 export async function getCurrentPerson(): Promise<PersonRow | null> {
-  const loaded = await loadRequestUser();
-  return loaded?.person?.hasAccess ? loaded.person : null;
+  const session = await loadRequestSession();
+  return session.status === "active" ? session.person : null;
 }
 
 /** The admin behind this request, without redirecting (for admin-only route handlers, which answer 404 otherwise). */
@@ -43,9 +31,12 @@ export async function getCurrentAdmin(): Promise<PersonRow | null> {
   return person?.isAdmin ? person : null;
 }
 
-/** True when the request has a session, with or without access. */
-export async function hasSession(): Promise<boolean> {
-  return (await loadRequestUser()) !== null;
+/**
+ * Whether this request has a session: `active`, `ended` (its person lost
+ * access, and reading it ended it), or `none`.
+ */
+export async function sessionStatus(): Promise<RequestSession["status"]> {
+  return (await loadRequestSession()).status;
 }
 
 /**
@@ -53,8 +44,8 @@ export async function hasSession(): Promise<boolean> {
  * time zone and date format, or the defaults.
  */
 export const getFormatter = cache(async (): Promise<DateFormatter> => {
-  const loaded = await loadRequestUser();
-  return createDateFormatter(displayPreferences(loaded?.person));
+  const session = await loadRequestSession();
+  return createDateFormatter(displayPreferences(session.status === "active" ? session.person : undefined));
 });
 
 /**
@@ -63,15 +54,11 @@ export const getFormatter = cache(async (): Promise<DateFormatter> => {
  * and notes the month as active for the person.
  */
 export async function requireUser(): Promise<CurrentUser> {
-  const loaded = await loadRequestUser();
-  if (!loaded) redirect("/login");
-  if (!loaded.person?.hasAccess) {
-    // Access ended after login (the sync normally ends these sessions first).
-    await getDb().delete(authSession).where(eq(authSession.id, loaded.session.session.id));
-    redirect("/no-access");
-  }
-  await recordActivity(getDb(), loaded.person.id);
-  return { userId: loaded.session.user.id, person: loaded.person };
+  const session = await loadRequestSession();
+  if (session.status === "none") redirect("/login");
+  if (session.status === "ended") redirect("/no-access");
+  await recordActivity(getDb(), session.person.id);
+  return { userId: session.userId, person: session.person };
 }
 
 /** Like `requireUser`, and the person must be a Logbook admin. */

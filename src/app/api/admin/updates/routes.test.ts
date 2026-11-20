@@ -15,20 +15,17 @@ const mocks = vi.hoisted(() => ({
     channel: vi.fn(),
   } satisfies Record<keyof UpdatesService, unknown>,
 }));
-// The real access check in src/lib/auth/session.ts, with the session and the person stubbed.
+// The real access check in src/lib/auth/session.ts, with the request's session stubbed.
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("@/lib/auth/auth", () => ({
-  getAuth: () => ({
-    api: {
-      getSession: async () => {
-        const person = await mocks.person();
-        return person ? { session: { id: "session", oidcPersonId: person.id }, user: { id: "user" } } : null;
-      },
+  getLogbookAuth: () => ({
+    requestSession: async () => {
+      const person = await mocks.person();
+      if (!person) return { status: "none" };
+      return person.hasAccess ? { status: "active", userId: "user", person } : { status: "ended" };
     },
   }),
 }));
-vi.mock("@/lib/directory/queries", () => ({ findPersonForSession: async () => mocks.person() }));
-vi.mock("@/lib/db/client", () => ({ getDb: () => ({}) }));
 vi.mock("@/lib/config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/config")>()),
   getAuthConfig: () => ({ LOGBOOK_BASE_URL: "https://logbook.example.org" }),

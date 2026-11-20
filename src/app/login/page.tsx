@@ -6,14 +6,17 @@ import { redirect } from "next/navigation";
 import { signInAction } from "@/app/actions";
 import { Logo } from "@/components/logo";
 import { NO_ACCESS_ERROR_CODE } from "@/lib/auth/access";
-import { hasSession } from "@/lib/auth/session";
+import { sessionStatus } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const { error } = await searchParams;
   if (error === NO_ACCESS_ERROR_CODE) redirect("/no-access");
-  if (await hasSession()) redirect("/");
+  const status = await sessionStatus();
+  if (status === "active") redirect("/");
+  // Access ended after login; reading the session ended it.
+  if (status === "ended") redirect("/no-access");
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-muted/40 p-6">

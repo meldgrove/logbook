@@ -6,12 +6,13 @@ import { signInAction, signOutAction } from "@/app/actions";
 import { GET as oidcCallback } from "@/app/api/auth/callback/oidc/route";
 import * as config from "@/lib/config";
 import * as database from "@/lib/db/client";
+import type { Database } from "@/lib/db/client";
 import { authAccount, authSession, person } from "@/lib/db/schema";
 import { createManualDirectory } from "@/lib/directory/manual";
 import { endSessionsForSubjects } from "@/lib/directory/sessions";
 import { logger } from "@/lib/logger";
 import * as access from "./access";
-import { createAuth, type Auth } from "./auth";
+import { createAuth, createLogbookAuth, type Auth, type CreateAuthOptions, type LogbookAuth } from "./auth";
 import { getCurrentPerson } from "./session";
 
 // session.ts reads the request's cookies through next/headers.
@@ -27,6 +28,8 @@ const testDb = connectTestDatabase();
 const { db } = testDb;
 let provider: FakeOidcProvider;
 let auth: Auth;
+let options: CreateAuthOptions;
+const globalAuth = globalThis as { logbookAuth?: LogbookAuth };
 
 beforeAll(async () => {
   provider = await startFakeOidcProvider();
@@ -40,13 +43,10 @@ beforeAll(async () => {
     OIDC_TRUST_EMAIL: false,
   };
   vi.spyOn(config, "getAuthConfig").mockReturnValue(authConfig);
-  auth = createAuth({
-    config: authConfig,
-    directory: createManualDirectory({ initialAdmins: [] }),
-    db,
-  });
-  // The auth that session.ts uses.
-  (globalThis as { logbookAuth?: Auth }).logbookAuth = auth;
+  options = { config: authConfig, directory: createManualDirectory({ initialAdmins: [] }), db };
+  auth = createAuth(options);
+  // The sessions that session.ts, the Server Actions, and the callback use.
+  globalAuth.logbookAuth = createLogbookAuth(options, auth);
 });
 beforeEach(() => testDb.reset());
 afterAll(async () => {
@@ -285,14 +285,17 @@ describe("login with the OIDC provider", () => {
     await addPerson({ oidcSubject: "sub-ada" });
     const { cookie } = await logIn({ sub: "sub-ada", email: "ada@example.org" });
     request.headers = new Headers({ cookie });
-    const getDb = vi.spyOn(database, "getDb").mockImplementationOnce(() => { throw new Error("database unavailable"); });
+    const working = globalAuth.logbookAuth;
+    // Logbook's own queries fail; Better Auth's still work.
+    const unavailable = { select() { throw new Error("database unavailable"); } } as unknown as Database;
+    globalAuth.logbookAuth = createLogbookAuth({ ...options, db: unavailable }, auth);
 
     try {
       await expect(signOutAction()).rejects.toThrow("redirect");
       expect(request.redirect).toHaveBeenLastCalledWith("/login");
       expect(await personFor(cookie)).toBeNull();
     } finally {
-      getDb.mockRestore();
+      globalAuth.logbookAuth = working;
     }
   });
 
