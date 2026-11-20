@@ -320,10 +320,12 @@ export function createLogbookAuth(options: CreateAuthOptions): LogbookAuth {
   };
 }
 
-const globalForAuth = globalThis as unknown as { logbookAuth?: LogbookAuth };
+// Not `logbookAuth`: a development server may still hold the Better Auth
+// instance that earlier versions kept under that key.
+const globalForAuth = globalThis as unknown as { logbookSessions?: LogbookAuth };
 
 /** This process's sessions, for the configured provider and directory. */
 export function getLogbookAuth(): LogbookAuth {
-  globalForAuth.logbookAuth ??= createLogbookAuth({ config: getAuthConfig(), directory: getDirectory(), db: getDb() });
-  return globalForAuth.logbookAuth;
+  globalForAuth.logbookSessions ??= createLogbookAuth({ config: getAuthConfig(), directory: getDirectory(), db: getDb() });
+  return globalForAuth.logbookSessions;
 }
