@@ -168,7 +168,7 @@ amd64 and arm64 and a GitHub release (`CONTRIBUTING.md` has the steps). No
 file holds the version: `package.json` stays at `0.0.0`. Release notes come
 from pull request titles; label a pull request `breaking` when admins must
 act on upgrade. Dependabot (`.github/dependabot.yml`)
-proposes updates weekly.
+proposes updates weekly, npm packages daily.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
