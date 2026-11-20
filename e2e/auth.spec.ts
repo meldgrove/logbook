@@ -11,7 +11,7 @@ test("a member of the access group signs in and sees the timeline", async ({ pag
 
   await expect(page).toHaveURL(/localhost:3000\/$/);
   await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Account of Erika Employee" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Erika Employee\s*erika@example\.test$/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
   // Only admins see the update button.
   await expect(page.locator("[data-update-state]")).toHaveCount(0);
@@ -106,7 +106,7 @@ test("signing out also ends the identity provider's session", async ({ page }) =
   await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
 
   // Sign out sits in the account menu at the bottom of the sidebar.
-  await page.getByRole("button", { name: "Account of Erika Employee" }).click();
+  await page.getByRole("button", { name: /^Erika Employee\s*erika@example\.test$/ }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
 
