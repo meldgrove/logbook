@@ -93,6 +93,7 @@ export default async function DecidePage({ params }: PageProps<"/e/[ref]/decide"
         <CardContent>
           {view.permissions.publish ? (
             <ActionForm action={publishAction.bind(null, entry.id, entry.number)} submitLabel="Publish decision" pendingLabel="Publishing…" className="gap-5">
+              <input type="hidden" name="version" value={view.currentVersion} />
               <Field id="summary" label="Summary" required hint="Shown in the timeline and the Slack post. Describe the decision, not the question.">
                 <Input id="summary" name="summary" required maxLength={SUMMARY_MAX} defaultValue={clipText(entry.summary, SUMMARY_MAX)} aria-describedby="summary-hint" />
               </Field>
@@ -126,6 +127,7 @@ export default async function DecidePage({ params }: PageProps<"/e/[ref]/decide"
         </CardHeader>
         <CardContent>
           <ActionForm action={rejectAction.bind(null, entry.id, entry.number)} submitLabel="Reject" variant="destructive" pendingLabel="Rejecting…" className="gap-5">
+            <input type="hidden" name="version" value={view.currentVersion} />
             <Field id="reject-rationale" label="Rationale" required>
               <MarkdownField id="reject-rationale" name="rationale" required rows={4} />
             </Field>

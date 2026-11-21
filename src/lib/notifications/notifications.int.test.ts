@@ -145,7 +145,7 @@ describe("recording notifications", () => {
   it("tells the people on a decision about an addendum", async () => {
     const id = await inObjectionRound();
     await giveGo(db, amy, id, { version: 1 }, WEDNESDAY);
-    const publish = publishSchema.parse({ summary: "We do it.", finalText: "Yes.", rationale: "Focus.", personalDataConfirmed: "on" });
+    const publish = publishSchema.parse({ version: "1", summary: "We do it.", finalText: "Yes.", rationale: "Focus.", personalDataConfirmed: "on" });
     await publishDecision(db, dan, id, publish, WEDNESDAY);
     expect(ids(await deliveries("proposal.closed"))).toEqual(sorted(ada, amy));
     await addAddendum(db, dan, id, { text: "Started on Monday.", personalDataConfirmed: "on" }, WEDNESDAY);
@@ -222,7 +222,7 @@ describe("reminders", () => {
     await postResponse(db, amy, id, { kind: "feedback", text: "Fine." }, WEDNESDAY);
     await startObjectionRound(db, ada, id, WEDNESDAY);
     await giveGo(db, amy, id, { version: 1 }, WEDNESDAY);
-    await publishDecision(db, dan, id, publishSchema.parse({ summary: "We do it.", finalText: "Yes.", rationale: "Focus.", personalDataConfirmed: "on" }), WEDNESDAY);
+    await publishDecision(db, dan, id, publishSchema.parse({ version: "1", summary: "We do it.", finalText: "Yes.", rationale: "Focus.", personalDataConfirmed: "on" }), WEDNESDAY);
 
     expect(await recordReminders(db, at("2026-11-13T09:00:00Z"))).toBe(0);
     expect(await recordReminders(db, at("2026-11-16T09:00:00Z"))).toBe(2); // the Monday after
@@ -263,7 +263,7 @@ describe("reminders", () => {
     await startObjectionRound(db, ada, id, WEDNESDAY);
     await giveGo(db, amy, id, { version: 1 }, WEDNESDAY);
     const late = at("2026-11-20T13:00:00Z"); // a Friday, after the 09:00 run, 15 days after the review date
-    await publishDecision(db, dan, id, publishSchema.parse({ summary: "We do it.", finalText: "Yes.", rationale: "Focus.", personalDataConfirmed: "on" }), late);
+    await publishDecision(db, dan, id, publishSchema.parse({ version: "1", summary: "We do it.", finalText: "Yes.", rationale: "Focus.", personalDataConfirmed: "on" }), late);
     expect(await recordReminders(db, at("2026-11-21T09:00:00Z"))).toBe(0); // Saturday
     expect(await recordReminders(db, at("2026-11-23T09:00:00Z"))).toBe(2); // the next working day
     expect(await recordReminders(db, at("2026-11-24T09:00:00Z"))).toBe(0);
