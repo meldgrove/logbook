@@ -202,10 +202,23 @@ describe("a two-way proposal", () => {
     expect((await state(draft.id)).entry.status).toBe("decided");
   });
 
+  it("is published or rejected only on the version the decider read", async () => {
+    const draft = await submitted(draftInput({ feedbackGiverIds: [] }));
+    await startObjectionRound(db, ada, draft.id, at("2026-11-09"));
+    const after = at("2026-11-11");
+    // The decider opened the page on version 1; then the proposer changed the proposal.
+    await addVersion(db, ada, draft.id, { proposalText: "We try it for six months.", personalDataConfirmed: "on" }, after);
+    await expectError(publishDecision(db, dan, draft.id, publish(), after), "invalid", "version");
+    await expectError(rejectProposal(db, dan, draft.id, { rationale: "Not now.", version: 1 }, after), "invalid", "version");
+    expect((await state(draft.id)).entry.status).toBe("objection_round");
+    await publishDecision(db, dan, draft.id, publish({ version: "2" }), after);
+    expect((await state(draft.id)).entry.status).toBe("decided");
+  });
+
   it("can only be rejected by the decider and withdrawn by the proposer", async () => {
     const first = await submitted(draftInput());
-    await expectError(rejectProposal(db, ada, first.id, { rationale: "No." }, WEDNESDAY), "forbidden");
-    await rejectProposal(db, dan, first.id, { rationale: "Not now." }, WEDNESDAY);
+    await expectError(rejectProposal(db, ada, first.id, { rationale: "No.", version: 1 }, WEDNESDAY), "forbidden");
+    await rejectProposal(db, dan, first.id, { rationale: "Not now.", version: 1 }, WEDNESDAY);
     expect((await state(first.id)).entry).toMatchObject({ status: "rejected", rationale: "Not now." });
     await expectError(postResponse(db, amy, first.id, { kind: "question", text: "Why?" }, WEDNESDAY), "forbidden");
 
@@ -246,7 +259,7 @@ describe("a one-way proposal", () => {
     // An objection from a consent giver blocks again; resolving it unblocks.
     const objection = await postResponse(db, eve, draft.id, { kind: "objection", text: "Payroll needs a month." }, at("2026-11-16"));
     expect((await state(draft.id, afterPeriod)).readiness.ready).toBe(false);
-    await expectError(publishDecision(db, dan, draft.id, publish(), afterPeriod), "invalid");
+    await expectError(publishDecision(db, dan, draft.id, publish({ version: "2" }), afterPeriod), "invalid");
     await expectError(resolveObjection(db, amy, draft.id, { responseId: objection!.id }, at("2026-11-16")), "forbidden");
     await resolveObjection(db, eve, draft.id, { responseId: objection!.id, note: "Start date moved." }, at("2026-11-16"));
 
@@ -255,7 +268,7 @@ describe("a one-way proposal", () => {
     expect((await state(draft.id, afterPeriod)).readiness.ready).toBe(false);
     await giveGo(db, amy, draft.id, { version: 2 }, at("2026-11-16"));
 
-    await publishDecision(db, dan, draft.id, publish(), afterPeriod);
+    await publishDecision(db, dan, draft.id, publish({ version: "2" }), afterPeriod);
     expect((await state(draft.id)).entry.status).toBe("decided");
   });
 
@@ -458,8 +471,9 @@ describe("no deletion", () => {
   });
 });
 
-function publish(overrides: { objectionHandling?: string } = {}) {
+function publish(overrides: { objectionHandling?: string; version?: string } = {}) {
   return publishSchema.parse({
+    version: "1",
     summary: "The tech team tries a four-day week for three months.",
     finalText: "We try a four-day week for three months.",
     rationale: "Focus time matters.",
@@ -647,7 +661,7 @@ describe("what each command records", () => {
     });
 
     const rejected = await inObjectionRound();
-    expect(await recorded(rejected, () => rejectProposal(db, dan, rejected, { rationale: "Not now." }, WEDNESDAY))).toEqual({
+    expect(await recorded(rejected, () => rejectProposal(db, dan, rejected, { rationale: "Not now.", version: 1 }, WEDNESDAY))).toEqual({
       audit: ["proposal.rejected"],
       messages: ["channel.rejected → channel", "proposal.closed → Ada", "proposal.closed → Amy"],
       webhook: true,

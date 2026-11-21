@@ -168,6 +168,12 @@ function enforce(check: Check) {
 
 const max = (a: string, b: string) => (a > b ? a : b);
 
+/** A Go or a decision counts only for the version the person read: refuses when a newer one was added meanwhile. */
+function assertReadVersion(loaded: LoadedProposal, version: number, then: string) {
+  const current = loaded.proposal.currentVersion;
+  if (version !== current) throw invalid("version", `Version ${current} was added after you opened the page. Reload the page and read it, then ${then}.`);
+}
+
 // ---------------------------------------------------------------------------
 // Drafts
 // ---------------------------------------------------------------------------
@@ -429,9 +435,7 @@ export async function answerQuestion(db: Database, actor: Actor, entryId: string
 export async function giveGo(db: Database, actor: Actor, entryId: string, input: { text?: string; version: number }, now = new Date()) {
   return withProposal(db, actor, entryId, now, async (tx, loaded) => {
     allow(permissions(loaded.snapshot, actor, now).go, "You cannot give a Go on this proposal now.");
-    if (input.version !== loaded.proposal.currentVersion) {
-      throw invalid("version", `Version ${loaded.proposal.currentVersion} was added after you opened the page. Read it, then give your Go.`);
-    }
+    assertReadVersion(loaded, input.version, "give your Go");
     await tx.insert(response).values({
       entryId,
       personId: actor.personId,
@@ -697,6 +701,7 @@ export async function publishDecision(db: Database, actor: Actor, entryId: strin
   return withProposal(db, actor, entryId, now, async (tx, loaded) => {
     const { snapshot: s } = loaded;
     allow(actor.personId === s.deciderId, "Only the decider publishes the decision.");
+    assertReadVersion(loaded, input.version, "decide");
     const ready = readiness(s, now);
     if (!ready.ready) throw new EntryError("invalid", "The publish criteria are not met yet.");
     if (objectionHandlingRequired(s) && !input.objectionHandling) {
@@ -758,9 +763,10 @@ async function close(
 }
 
 /** The only way to reject a proposal: the decider, with a rationale. */
-export async function rejectProposal(db: Database, actor: Actor, entryId: string, input: { rationale: string }, now = new Date()) {
+export async function rejectProposal(db: Database, actor: Actor, entryId: string, input: { rationale: string; version: number }, now = new Date()) {
   return withProposal(db, actor, entryId, now, async (tx, loaded) => {
     allow(permissions(loaded.snapshot, actor, now).reject, "Only the decider rejects an open proposal.");
+    assertReadVersion(loaded, input.version, "decide");
     return close(tx, actor, loaded, "rejected", input.rationale, now);
   });
 }

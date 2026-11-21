@@ -107,10 +107,12 @@ export const responseSchema = z.object({
   text: text("Text", TEXT_MAX),
 });
 
+/** The version shown to the person; a Go or a decision counts only for what they read. */
+const readVersion = z.coerce.number<string>().int().min(1);
+
 export const goSchema = z.object({
   text: optionalText("Comment", TEXT_MAX),
-  /** The version shown to the person; a Go counts only for what they read. */
-  version: z.coerce.number<string>().int().min(1),
+  version: readVersion,
 });
 
 export const answerSchema = z.object({
@@ -163,12 +165,13 @@ export const publishSchema = z.object({
   rationale: text("Rationale", TEXT_MAX),
   objectionHandling: optionalText("How objections were addressed", TEXT_MAX),
   effectiveDate: optionalDate("Enter a valid effective date."),
+  version: readVersion,
   personalDataConfirmed,
 });
 
 // The rationale of a rejection and the reason for a withdrawal are visible to
 // everyone, so they need the personal data confirmation too.
-export const rejectSchema = z.object({ rationale: text("Rationale", TEXT_MAX), personalDataConfirmed });
+export const rejectSchema = z.object({ rationale: text("Rationale", TEXT_MAX), version: readVersion, personalDataConfirmed });
 
 export const withdrawSchema = z.object({ reason: optionalText("Reason", NOTE_MAX), personalDataConfirmed });
 

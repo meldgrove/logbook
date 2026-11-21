@@ -155,7 +155,7 @@ describe("webhook", () => {
     await submitProposal(db, ada, rejected.id, WEDNESDAY);
     await postResponse(db, amy, rejected.id, { kind: "feedback", text: "Fine." }, WEDNESDAY);
     await startObjectionRound(db, ada, rejected.id, WEDNESDAY);
-    await rejectProposal(db, dan, rejected.id, { rationale: "Not now." }, WEDNESDAY);
+    await rejectProposal(db, dan, rejected.id, { rationale: "Not now.", version: 1 }, WEDNESDAY);
     const withdrawn = await saveDraft(db, ada, input, undefined, WEDNESDAY);
     await submitProposal(db, ada, withdrawn.id, WEDNESDAY);
     await withdrawProposal(db, ada, withdrawn.id, {}, WEDNESDAY);
@@ -194,6 +194,7 @@ describe("webhook", () => {
     await postResponse(db, amy, draft.id, { kind: "objection", text: "Support on Fridays is thin." }, WEDNESDAY);
     const friday = new Date("2026-11-06T09:00:00Z");
     const publish = publishSchema.parse({
+      version: "1",
       summary: "The tech team tries a four-day week.",
       finalText: "We try it for three months.",
       rationale: "Focus matters.",
