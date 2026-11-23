@@ -9,8 +9,9 @@ import {
   validateWorkerConfig,
 } from "@/lib/config";
 import { getDb, getPool } from "@/lib/db/client";
+import { createOutageWatch, waitForDatabase } from "@/lib/db/outage";
 import { envValue } from "@/lib/env";
-import { asError, sentryOptions } from "@/lib/error-reporting";
+import { sentryOptions } from "@/lib/error-reporting";
 import { getDirectory } from "@/lib/directory/directory";
 import type { SyncTrigger } from "@/lib/directory/sync";
 import { SERVER_TIME_ZONE } from "@/lib/format";
@@ -21,11 +22,12 @@ import {
   QUEUES,
   REMINDERS_CRON,
 } from "@/lib/jobs/queues";
-import { errorMessage, logger } from "@/lib/logger";
+import { logger } from "@/lib/logger";
 import { retrySlackLookups, startDispatcher } from "@/lib/notifications/dispatch";
 import { notifyLostAccess, recordReminders } from "@/lib/notifications/notify";
 import { refreshReadiness } from "@/lib/process/commands";
 import { channelModes, createTransports } from "@/lib/notifications/transports";
+import { handleBossErrors } from "./boss-errors";
 import { DEFAULT_HEARTBEAT_FILE, startHeartbeat } from "./heartbeat";
 import { setUpWebhookJobs } from "./webhook-jobs";
 
@@ -38,16 +40,15 @@ async function main() {
   const sentry = sentryOptions(getErrorReportingConfig(), "worker");
   // The bundle has no node_modules to hook into at load time.
   if (sentry) Sentry.init({ ...sentry, enableRuntimeChannelInjection: false });
+  // A restart of PostgreSQL is a warning; only a database that stays
+  // unreachable goes to Sentry.
+  const outage = createOutageWatch({ report: (error) => Sentry.captureException(error) });
+  await waitForDatabase(() => getPool().query("select 1"), outage);
   const boss = new PgBoss({
     connectionString: getDatabaseConfig().DATABASE_URL,
     application_name: "logbook-worker-pgboss",
   });
-  boss.on("error", (error) => {
-    // pg-boss errors can carry a PostgreSQL client or bound query values.
-    const exception = asError(error);
-    logger.error({ error: errorMessage(exception) }, "pg-boss error");
-    Sentry.captureException(exception);
-  });
+  handleBossErrors(boss, outage, (error) => Sentry.captureException(error));
   await boss.start();
 
   // The Keycloak directory syncs every 15 minutes and once at startup, so a
@@ -98,13 +99,14 @@ async function main() {
     db: getDb,
   });
 
-  const stopDispatcher = startDispatcher({ db: getDb(), transports, intervalMs: DISPATCH_INTERVAL_MS });
+  const stopDispatcher = startDispatcher({ db: getDb(), transports, intervalMs: DISPATCH_INTERVAL_MS, outage });
 
   const stopHeartbeat = startHeartbeat({
     db: getDb(),
     workerId: hostname(),
     file: envValue("WORKER_HEARTBEAT_FILE") ?? DEFAULT_HEARTBEAT_FILE,
     channels,
+    outage,
   });
   logger.info({ directory: directory.kind, channels }, "worker started");
 
