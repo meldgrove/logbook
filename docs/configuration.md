@@ -54,7 +54,7 @@ trailing one.
 | `KEYCLOAK_ACCESS_GROUP` | required | Group path, e.g. `/logbook`. Its members, and members of its subgroups, have access |
 | `KEYCLOAK_ADMIN_GROUP` | required | Group path, e.g. `/logbook-admins`. Its members are admins (and have access) |
 | `KEYCLOAK_TEAMS_GROUP` | required | Group path, e.g. `/teams`. Each direct subgroup is a team; it needs at least one |
-| `KEYCLOAK_CLIENT_ID` | `OIDC_CLIENT_ID` | Client with a service account that may read users and groups |
+| `KEYCLOAK_CLIENT_ID` | `OIDC_CLIENT_ID` | Client with a service account that may read users and groups: the role `view-users` and, from Keycloak 26.8.2, the default client scope `kc-admin-api` ([Keycloak setup](identity-and-access.md#keycloak-setup)) |
 | `KEYCLOAK_CLIENT_SECRET` | `OIDC_CLIENT_SECRET` | Its secret |
 
 `OIDC_ISSUER` must be the realm URL (`…/realms/<realm>`); the Admin API URL is
