@@ -97,6 +97,11 @@ Actions, route handlers) and failures of the worker go to
 its stack trace are sent: no user, cookies, headers, request bodies, query
 strings, or values from database queries. The browser sends nothing.
 
+The worker rides out a restart of PostgreSQL, such as during an update: it
+logs a warning, retries, and carries on once the database answers. A
+database that stays unreachable for 5 minutes goes to Sentry, once per
+outage.
+
 | Variable | Default | Value |
 |---|---|---|
 | `SENTRY_DSN` | none | The project's DSN (Client Key). Off without it |

@@ -1,5 +1,6 @@
 import { and, asc, eq, isNull, lte } from "drizzle-orm";
 import type { Database, Transaction } from "@/lib/db/client";
+import type { OutageWatch } from "@/lib/db/outage";
 import { notificationDelivery, person, type NotificationChannel } from "@/lib/db/schema";
 import { createDateFormatter, defaultFormatter } from "@/lib/format";
 import { errorMessage, logger } from "@/lib/logger";
@@ -231,14 +232,31 @@ export async function dispatchDue(
   return counts;
 }
 
-/** Polls for due deliveries every `intervalMs`. Returns a function that stops and waits for the current run. */
-export function startDispatcher(options: { db: Database; transports: Transports; intervalMs: number }): () => Promise<void> {
+/**
+ * Polls for due deliveries every `intervalMs`. Returns a function that stops
+ * and waits for the current run. A claimed delivery whose connection drops
+ * stays pending: its transaction rolls back. Connection errors go to the
+ * outage watch, as does each run that reached the database.
+ */
+export function startDispatcher(options: {
+  db: Database;
+  transports: Transports;
+  intervalMs: number;
+  outage: OutageWatch;
+}): () => Promise<void> {
   let running: Promise<unknown> | undefined;
   let stopped = false;
   const tick = () => {
     if (running || stopped) return;
     running = dispatchDue(options.db, options.transports)
-      .catch((error: unknown) => logger.error({ error: errorMessage(error) }, "notification dispatch failed"))
+      .then(
+        () => options.outage.answered(),
+        (error: unknown) => {
+          if (!options.outage.failed(error, "notification dispatch")) {
+            logger.error({ error: errorMessage(error) }, "notification dispatch failed");
+          }
+        },
+      )
       .finally(() => {
         running = undefined;
       });

@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import type { Database } from "@/lib/db/client";
+import type { OutageWatch } from "@/lib/db/outage";
 import { workerHeartbeat } from "@/lib/db/schema";
 import type { NotificationChannels } from "@/lib/notifications/types";
 import { errorMessage, logger } from "@/lib/logger";
@@ -10,9 +11,16 @@ export { DEFAULT_HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS } from "./heartbeat-file"
 
 /**
  * Writes a heartbeat every 30 seconds: to a file, which the container health
- * check reads, and to the database, which the admin page shows.
+ * check reads, and to the database, which the admin page shows. Its write
+ * tells the outage watch whether the database answers.
  */
-export function startHeartbeat(options: { db: Database; workerId: string; file: string; channels: NotificationChannels }): () => void {
+export function startHeartbeat(options: {
+  db: Database;
+  workerId: string;
+  file: string;
+  channels: NotificationChannels;
+  outage: OutageWatch;
+}): () => void {
   const startedAt = new Date();
 
   async function beat() {
@@ -27,8 +35,11 @@ export function startHeartbeat(options: { db: Database; workerId: string; file: 
         .insert(workerHeartbeat)
         .values({ workerId: options.workerId, startedAt, beatAt: now, channels: options.channels })
         .onConflictDoUpdate({ target: workerHeartbeat.workerId, set: { startedAt, beatAt: now, channels: options.channels } });
+      options.outage.answered();
     } catch (error) {
-      logger.warn({ error: errorMessage(error) }, "could not write the heartbeat to the database");
+      if (!options.outage.failed(error, "heartbeat")) {
+        logger.warn({ error: errorMessage(error) }, "could not write the heartbeat to the database");
+      }
     }
   }
 
