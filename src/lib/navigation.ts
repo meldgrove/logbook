@@ -4,7 +4,7 @@
  * frame of `@meldgrove/ui`, which marks the current item.
  */
 
-export type NavKey = "timeline" | "tasks" | "stats" | "admin" | "people" | "teams" | "tags";
+export type NavKey = "timeline" | "tasks" | "stats" | "admin" | "people" | "teams" | "tags" | "integrations";
 
 export interface NavLink {
   key: NavKey;
@@ -36,6 +36,7 @@ export const ADMIN_NAV: NavLink[] = [
   { key: "people", href: "/admin/people", label: "People" },
   { key: "teams", href: "/admin/teams", label: "Teams" },
   { key: "tags", href: "/admin/tags", label: "Tags" },
+  { key: "integrations", href: "/admin/integrations", label: "Integrations" },
 ];
 
 /** The sidebar of a person: the main pages, and the administration for admins. */
@@ -53,7 +54,7 @@ const TIMELINE: Crumb = { label: "Timeline", href: "/" };
 const NEW_ENTRY = "New entry";
 const NEW_PAGES: Record<string, string> = { log: "Log something", proposal: "New proposal" };
 const ENTRY_PAGES: Record<string, string> = { edit: "Edit", history: "History", decide: "Decide" };
-const ADMIN_PAGES: Record<string, string> = { people: "People", teams: "Teams", tags: "Tags" };
+const ADMIN_PAGES: Record<string, string> = { people: "People", teams: "Teams", tags: "Tags", integrations: "Integrations" };
 
 function entryRef(segment: string): string {
   try {

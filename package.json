@@ -20,7 +20,8 @@
     "db:migrate": "LOGBOOK_PROCESS=migrate tsx --env-file-if-exists=.env.local src/scripts/migrate.ts",
     "worker": "LOGBOOK_PROCESS=worker tsx --env-file-if-exists=.env.local src/workers/main.ts",
     "directory:sync": "LOGBOOK_PROCESS=directory-sync tsx --env-file-if-exists=.env.local src/scripts/directory-sync.ts",
-    "import:entries": "LOGBOOK_PROCESS=import-entries tsx --env-file-if-exists=.env.local src/scripts/import-entries.ts"
+    "import:entries": "LOGBOOK_PROCESS=import-entries tsx --env-file-if-exists=.env.local src/scripts/import-entries.ts",
+    "cli": "LOGBOOK_PROCESS=cli tsx --env-file-if-exists=.env.local src/cli/entry.ts"
   },
   "dependencies": {
     "@meldgrove/ui": "^0.1.7",

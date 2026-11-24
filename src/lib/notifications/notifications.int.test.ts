@@ -22,7 +22,7 @@ import { proposalDraftSchema, publishSchema, type ProposalDraftInput } from "@/l
 import { dispatchDue, MAX_ATTEMPTS, retrySlackLookups } from "./dispatch";
 import { notifyLostAccess, recordReminders } from "./notify";
 import { getNotificationStatus } from "./queries";
-import { DeliveryError, type Email, type SlackTransport, type Transports } from "./transports";
+import { createTransports, DeliveryError, type Email, type SlackTransport, type Transports } from "./transports";
 
 const testDb = connectTestDatabase();
 
@@ -284,6 +284,7 @@ function fakeTransports(options: { slackUsers?: Record<string, string>; email?: 
   const lookups: string[] = [];
   const slack: SlackTransport = {
     mode: "live",
+    testAuth: async () => ({ team: "Test", user: "logbook" }),
     async lookupUserByEmail(email) {
       lookups.push(email);
       return options.slackUsers?.[email] ?? null;
@@ -457,6 +458,20 @@ describe("the worker's sender", () => {
     expect(toDan).toMatchObject({ status: "pending", attempts: 1, lastError: "Slack chat.postMessage: invalid_auth. Email is not configured." });
   });
 
+  it("keeps messages to retry while a saved secret cannot be read, and skips none", async () => {
+    await submitted();
+    const off = { provider: "none" as const, fromAddress: "", fromName: "", smtp: { host: "", port: 587, security: "starttls" as const, username: "", password: null }, mailersendToken: null };
+    const transports = createTransports({ mode: "live", baseUrl: "https://logbook.example", slack: { botToken: null, channelId: "C0123456" }, email: off, unreadable: ["slack.botToken"] });
+    expect(await dispatchDue(db, transports, () => WEDNESDAY)).toEqual({ sent: 0, skipped: 0, retry: 4, failed: 0 });
+    for (const delivery of await deliveries()) {
+      expect(delivery).toMatchObject({ status: "pending", attempts: 1 });
+      expect(delivery.lastError).toContain("The Slack bot token cannot be read by the worker: see Admin › Integrations.");
+    }
+    // Read again (the token was entered): everything goes out.
+    const fake = fakeTransports({ slackUsers: users });
+    expect(await dispatchDue(db, fake.transports, () => new Date(WEDNESDAY.getTime() + 60_000))).toEqual({ sent: 4, skipped: 0, retry: 0, failed: 0 });
+  });
+
   it("looks up people without a Slack account again after a week", async () => {
     await db.update(person).set({ slackLookupFailedAt: at("2026-10-27T09:00:00Z") }).where(eq(person.id, amy.personId));
     await db.update(person).set({ slackLookupFailedAt: at("2026-11-01T09:00:00Z") }).where(eq(person.id, eve.personId));
@@ -476,6 +491,7 @@ describe("the worker's sender", () => {
       db.update(person).set({ workEmail: "amy.new@example.org", slackUserId: null, slackLookupFailedAt: null }).where(eq(person.id, amy.personId));
     const racing = (found: string | null): SlackTransport => ({
       mode: "live",
+      testAuth: async () => ({ team: "Test", user: "logbook" }),
       async lookupUserByEmail() {
         await changeEmail();
         return found;
@@ -555,7 +571,7 @@ describe("the Logbook Slack channel", () => {
     await update();
     await dispatchDue(db, { ...fake.transports, slackChannelId: undefined }, () => WEDNESDAY);
     const second = (await deliveries("channel.update")).find((d) => d.id !== post!.id);
-    expect(second).toMatchObject({ status: "skipped", lastError: "No Slack channel is configured (SLACK_CHANNEL_ID)." });
+    expect(second).toMatchObject({ status: "skipped", lastError: "No Slack channel is set (Admin › Integrations)." });
   });
 
   it("shows the summary, impact, and affected teams in each post, for proposals too", async () => {

@@ -29,3 +29,19 @@ it("redacts implicit messages for both forms of structured error logging", () =>
   expect(lines.map((line) => JSON.parse(line).msg)).toEqual(Array(2).fill("Failed query: select $1\nparams: [redacted]"));
   expect(lines.join("\n")).not.toContain("private bound value");
 });
+
+it("redacts the secrets of an Admin › Integrations body", () => {
+  const lines: string[] = [];
+  const logger = createLogger("info", { write: (line) => lines.push(line) });
+  logger.info({
+    body: {
+      botToken: "xoxb-private-1",
+      secret: "private-webhook-secret",
+      smtp: { password: "private-smtp-password" },
+      mailersend: { token: "private-mailersend-token" },
+    },
+    settings: { mailersendToken: "private-mailersend-token", webhook: { secret: "private-webhook-secret" } },
+  }, "body");
+  expect(lines.join("\n")).not.toMatch(/private/);
+  expect(JSON.parse(lines[0]!).body.smtp.password).toBe("[redacted]");
+});

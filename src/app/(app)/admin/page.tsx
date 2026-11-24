@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@meld
 import { PageHeader } from "@meldgrove/ui/page";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@meldgrove/ui/table";
 import { UpdatesSettings } from "@meldgrove/ui/updates";
-import { CircleAlert, Tags, Users, UsersRound } from "lucide-react";
+import { CircleAlert, Plug, Tags, Users, UsersRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PeriodsForm } from "@/components/proposals/periods-form";
@@ -43,7 +43,7 @@ export default async function AdminPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Admin"
-        description="People, notifications, the webhook, the defaults of the decision process, and updates."
+        description="People, notifications, the webhook, the defaults of the decision process, and updates. Slack, email, and the webhook are set up under Integrations."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" size="sm">
@@ -62,6 +62,12 @@ export default async function AdminPage() {
               <Link href="/admin/tags">
                 <Tags aria-hidden="true" />
                 Tags
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/integrations">
+                <Plug aria-hidden="true" />
+                Integrations
               </Link>
             </Button>
           </div>
@@ -160,12 +166,9 @@ export default async function AdminPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
-            <Fact label="Slack" value={<ChannelBadge mode={channels?.slack} variable="SLACK_BOT_TOKEN" />} />
-            <Fact
-              label="Slack channel"
-              value={<ChannelBadge mode={channels?.slackChannel} variable="SLACK_BOT_TOKEN and SLACK_CHANNEL_ID" />}
-            />
-            <Fact label="Email" value={<ChannelBadge mode={channels?.email} variable="SMTP_URL or MAILERSEND_API_TOKEN, and MAIL_FROM," />} />
+            <Fact label="Slack" value={<ChannelBadge mode={channels?.slack} />} />
+            <Fact label="Slack channel" value={<ChannelBadge mode={channels?.slackChannel} />} />
+            <Fact label="Email" value={<ChannelBadge mode={channels?.email} />} />
           </dl>
 
           {notifications.failedTotal > 0 ? (
@@ -273,12 +276,12 @@ export default async function AdminPage() {
           </CardTitle>
           <CardDescription>
             Published updates, learnings, and decisions, and decided or rejected proposals are posted to the webhook as
-            JSON, signed with WEBHOOK_SECRET. Changes go out within minutes; a nightly run re-sends anything that changed.
+            signed JSON. Changes go out within minutes; a nightly run re-sends anything that changed.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <Fact label="Webhook" value={<ChannelBadge mode={channels?.webhook} variable="WEBHOOK_URL and WEBHOOK_SECRET" />} />
+            <Fact label="Webhook" value={<ChannelBadge mode={channels?.webhook} />} />
             <Fact label="Entries delivered" value={String(webhook.delivered)} />
             <Fact label="Waiting" value={String(webhook.waiting)} />
             <Fact label="Last delivered" value={fmt.dateTime(webhook.lastDeliveredAt)} />
@@ -389,14 +392,16 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function ChannelBadge({ mode, variable }: { mode: ChannelMode | undefined; variable: string }) {
+function ChannelBadge({ mode }: { mode: ChannelMode | undefined }) {
   if (mode === undefined) return <span className="text-muted-foreground">Unknown until the worker reports</span>;
   if (mode === "live") return <Badge variant="secondary">On</Badge>;
   if (mode === "console") return <Badge variant="outline">Log only (development)</Badge>;
   return (
     <span className="flex flex-wrap items-center gap-2">
       <Badge variant="destructive">Off</Badge>
-      <span className="text-muted-foreground">Set {variable} for the worker.</span>
+      <Link className="text-muted-foreground underline underline-offset-2" href="/admin/integrations">
+        Set it up under Integrations.
+      </Link>
     </span>
   );
 }

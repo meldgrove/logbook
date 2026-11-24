@@ -14,7 +14,10 @@ function serializeError(error: unknown) {
   };
 }
 
-/** JSON logs to stdout, for the container logs. */
+/**
+ * JSON logs to stdout, for the container logs. The operator command (`cli`)
+ * logs to stderr instead: its stdout carries only its output.
+ */
 export function createLogger(level: string, destination?: DestinationStream) {
   return pino({
     level,
@@ -25,13 +28,31 @@ export function createLogger(level: string, destination?: DestinationStream) {
       msg: (message: unknown) => typeof message === "string" ? withoutQueryParameters(message) : message,
     },
     redact: {
-      paths: ["*.password", "*.secret", "*.token", "*.accessToken", "*.refreshToken", "*.idToken", "*.authorization"],
+      paths: [
+        "*.password",
+        "*.secret",
+        "*.token",
+        "*.accessToken",
+        "*.refreshToken",
+        "*.idToken",
+        "*.authorization",
+        // The secrets of an Admin › Integrations body (src/lib/integrations/schemas.ts).
+        "*.botToken",
+        "*.mailersendToken",
+        "*.*.password",
+        "*.*.token",
+        "*.*.secret",
+        "*.*.botToken",
+      ],
       censor: "[redacted]",
     },
   }, destination);
 }
 
-export const logger = createLogger(envValue("LOG_LEVEL") ?? (process.env.NODE_ENV === "test" ? "silent" : "info"));
+export const logger = createLogger(
+  envValue("LOG_LEVEL") ?? (process.env.NODE_ENV === "test" ? "silent" : "info"),
+  envValue("LOGBOOK_PROCESS") === "cli" ? pino.destination({ fd: 2, sync: true }) : undefined,
+);
 
 export function errorMessage(error: unknown): string {
   return withoutQueryParameters(error instanceof Error ? error.message : String(error));

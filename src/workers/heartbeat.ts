@@ -18,7 +18,8 @@ export function startHeartbeat(options: {
   db: Database;
   workerId: string;
   file: string;
-  channels: NotificationChannels;
+  /** What the worker reports about its channels, read at each beat. */
+  channels: () => NotificationChannels;
   outage: OutageWatch;
 }): () => void {
   const startedAt = new Date();
@@ -31,10 +32,11 @@ export function startHeartbeat(options: {
       logger.warn({ error: errorMessage(error) }, "could not write the heartbeat file");
     }
     try {
+      const channels = options.channels();
       await options.db
         .insert(workerHeartbeat)
-        .values({ workerId: options.workerId, startedAt, beatAt: now, channels: options.channels })
-        .onConflictDoUpdate({ target: workerHeartbeat.workerId, set: { startedAt, beatAt: now, channels: options.channels } });
+        .values({ workerId: options.workerId, startedAt, beatAt: now, channels })
+        .onConflictDoUpdate({ target: workerHeartbeat.workerId, set: { startedAt, beatAt: now, channels } });
       options.outage.answered();
     } catch (error) {
       if (!options.outage.failed(error, "heartbeat")) {

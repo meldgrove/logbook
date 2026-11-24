@@ -1,4 +1,6 @@
 import nodemailer from "nodemailer";
+import { DEFAULT_FROM_NAME, type SmtpSecurity } from "@/lib/integrations/schemas";
+import type { EmailSettings, SlackSettings, Unreadable } from "@/lib/integrations/store";
 import { logger } from "@/lib/logger";
 import type { ChannelMode, NotificationChannels } from "./types";
 
@@ -29,8 +31,13 @@ export class DeliveryError extends Error {
 /** HTTP statuses that may pass: timeouts, rate limits, and server errors. Other 4xx answers are permanent. */
 const temporaryStatus = (status: number) => status === 408 || status === 429 || status >= 500;
 
+/** "unreadable": the channel is set up, but its saved secret cannot be read, so every send fails. */
+export type TransportMode = "live" | "console" | "unreadable";
+
 export interface SlackTransport {
-  mode: "live" | "console";
+  mode: TransportMode;
+  /** The workspace and the bot's name, for the test button: checks the token. */
+  testAuth(): Promise<{ team: string; user: string }>;
   /** The Slack user ID for a work email, or null if there is no such (active) user. */
   lookupUserByEmail(email: string): Promise<string | null>;
   /** Sends a direct message from the app to a Slack user. */
@@ -46,15 +53,15 @@ export interface Email {
 }
 
 export interface EmailTransport {
-  mode: "live" | "console";
-  /** "smtp", "mailersend", or "console". */
+  mode: TransportMode;
+  /** "smtp", "mailersend", "console", or "unreadable". */
   kind: string;
   send(email: Email): Promise<void>;
 }
 
 export interface Transports {
   slack?: SlackTransport;
-  /** The Slack channel for one post per entry (SLACK_CHANNEL_ID). */
+  /** The Slack channel for one post per entry (Admin › Integrations). */
   slackChannelId?: string;
   email?: EmailTransport;
   /** LOGBOOK_BASE_URL, for links in messages. */
@@ -63,7 +70,7 @@ export interface Transports {
 
 /** What the admin page shows for each channel. */
 export function channelModes(transports: Transports): NotificationChannels {
-  const mode = (t: { mode: "live" | "console" } | undefined): ChannelMode => t?.mode ?? "off";
+  const mode = (t: { mode: TransportMode } | undefined): ChannelMode => (!t || t.mode === "unreadable" ? "off" : t.mode);
   return {
     slack: mode(transports.slack),
     slackChannel: transports.slackChannelId ? mode(transports.slack) : "off",
@@ -81,7 +88,8 @@ function retryAfterMs(response: Response): number | undefined {
 interface SlackResponse {
   ok: boolean;
   error?: string;
-  user?: { id: string; deleted?: boolean };
+  user?: { id: string; deleted?: boolean } | string;
+  team?: string;
 }
 
 /** Slack errors that may pass. Every other one (a bad token, a missing scope, an unknown user) is permanent. */
@@ -116,13 +124,19 @@ export function createSlackTransport(token: string, fetchImpl: typeof fetch = fe
 
   return {
     mode: "live",
+    async testAuth() {
+      const result = await call("auth.test", { body: {} });
+      if (!result.ok) throw slackError("auth.test", result.error);
+      return { team: result.team ?? "", user: typeof result.user === "string" ? result.user : "" };
+    },
     async lookupUserByEmail(email) {
       const result = await call("users.lookupByEmail", { query: { email } });
       if (!result.ok) {
         if (result.error === "users_not_found") return null;
         throw slackError("users.lookupByEmail", result.error);
       }
-      return result.user && !result.user.deleted ? result.user.id : null;
+      const user = typeof result.user === "object" ? result.user : undefined;
+      return user && !user.deleted ? user.id : null;
     },
     async postMessage(userId, text) {
       const result = await call("chat.postMessage", { body: { channel: userId, text, unfurl_links: false, unfurl_media: false } });
@@ -181,12 +195,26 @@ interface SmtpError extends Error {
 }
 
 export function createSmtpTransport(
-  options: { url: string; from: string; fromName: string },
+  options: {
+    host: string;
+    port: number;
+    security: SmtpSecurity;
+    username: string;
+    password: string | null;
+    from: string;
+    fromName: string;
+  },
   createTransport: typeof nodemailer.createTransport = nodemailer.createTransport,
 ): EmailTransport {
-  // The URL sets host, port, TLS, and credentials; the timeouts apply on top.
   const transporter = createTransport({
-    url: options.url,
+    host: options.host,
+    port: options.port,
+    // `tls`: TLS from the start (465); `starttls`: upgrade, or fail (587);
+    // `auto`: upgrade when the server offers it; `none`: never.
+    secure: options.security === "tls",
+    requireTLS: options.security === "starttls",
+    ignoreTLS: options.security === "none",
+    auth: options.username ? { user: options.username, pass: options.password ?? "" } : undefined,
     connectionTimeout: TIMEOUT_MS,
     greetingTimeout: TIMEOUT_MS,
     socketTimeout: TIMEOUT_MS,
@@ -219,6 +247,7 @@ export function createSmtpTransport(
 export function createConsoleSlackTransport(): SlackTransport {
   return {
     mode: "console",
+    testAuth: async () => ({ team: "console", user: "console" }),
     lookupUserByEmail: async () => null,
     async postMessage(userId, text) {
       logger.info({ channel: "slack", to: userId, text }, "notification (console transport)");
@@ -237,43 +266,82 @@ export function createConsoleEmailTransport(): EmailTransport {
   };
 }
 
-function createEmailTransport(config: {
-  SMTP_URL?: string;
-  MAILERSEND_API_TOKEN?: string;
-  MAIL_FROM?: string;
-  MAIL_FROM_NAME: string;
-}): EmailTransport | undefined {
-  if (!config.MAIL_FROM) return undefined;
-  if (config.SMTP_URL) return createSmtpTransport({ url: config.SMTP_URL, from: config.MAIL_FROM, fromName: config.MAIL_FROM_NAME });
-  if (config.MAILERSEND_API_TOKEN) {
-    return createMailerSendTransport({ token: config.MAILERSEND_API_TOKEN, from: config.MAIL_FROM, fromName: config.MAIL_FROM_NAME });
-  }
-  return undefined;
+/*
+ * A channel that is set up, but whose saved secret cannot be read (a changed
+ * BETTER_AUTH_SECRET, or a worker without it). It is not off: a message goes
+ * out on the other channel or is tried again, and ends as failed, not skipped.
+ */
+const secretUnreadable = (secret: string) =>
+  new DeliveryError(`${secret} cannot be read by the worker: see Admin › Integrations.`, { permanent: true });
+
+function createUnreadableSlackTransport(): SlackTransport {
+  const fail = async (): Promise<never> => {
+    throw secretUnreadable("The Slack bot token");
+  };
+  return { mode: "unreadable", testAuth: fail, lookupUserByEmail: fail, postMessage: fail };
 }
 
-/** The transports for this worker's configuration. A channel without its settings is off. */
-export function createTransports(config: {
-  NOTIFICATION_TRANSPORT: "live" | "console";
-  LOGBOOK_BASE_URL: string;
-  SLACK_BOT_TOKEN?: string;
-  SLACK_CHANNEL_ID?: string;
-  SMTP_URL?: string;
-  MAILERSEND_API_TOKEN?: string;
-  MAIL_FROM?: string;
-  MAIL_FROM_NAME: string;
+function createUnreadableEmailTransport(secret: string): EmailTransport {
+  return {
+    mode: "unreadable",
+    kind: "unreadable",
+    async send() {
+      throw secretUnreadable(secret);
+    },
+  };
+}
+
+/** Whether email can be sent with these settings: a provider, its server or token, and a sender. */
+export function emailReady(email: EmailSettings): boolean {
+  if (email.provider === "none" || !email.fromAddress) return false;
+  if (email.provider === "mailersend") return Boolean(email.mailersendToken);
+  return Boolean(email.smtp.host) && (!email.smtp.username || Boolean(email.smtp.password));
+}
+
+function createEmailTransport(email: EmailSettings, unreadable: readonly Unreadable[]): EmailTransport | undefined {
+  if (email.fromAddress && email.provider === "mailersend" && unreadable.includes("email.mailersend.token")) {
+    return createUnreadableEmailTransport("The MailerSend API token");
+  }
+  if (email.fromAddress && email.provider === "smtp" && email.smtp.host && email.smtp.username && unreadable.includes("email.smtp.password")) {
+    return createUnreadableEmailTransport("The SMTP password");
+  }
+  if (!emailReady(email)) return undefined;
+  const from = { from: email.fromAddress, fromName: email.fromName || DEFAULT_FROM_NAME };
+  if (email.provider === "mailersend") return createMailerSendTransport({ token: email.mailersendToken!, ...from });
+  return createSmtpTransport({ ...email.smtp, ...from });
+}
+
+/**
+ * The transports for the settings of Admin › Integrations. A channel without
+ * its settings is off; one whose secret is in `unreadable` fails each send.
+ * `console` (NOTIFICATION_TRANSPORT, development and tests) logs every
+ * message instead.
+ */
+export function createTransports(options: {
+  mode: "live" | "console";
+  baseUrl: string;
+  slack: SlackSettings;
+  email: EmailSettings;
+  /** Saved secrets that could not be opened (`openStored`). */
+  unreadable?: readonly Unreadable[];
 }): Transports {
-  if (config.NOTIFICATION_TRANSPORT === "console") {
+  const unreadable = options.unreadable ?? [];
+  if (options.mode === "console") {
     return {
-      baseUrl: config.LOGBOOK_BASE_URL,
+      baseUrl: options.baseUrl,
       slack: createConsoleSlackTransport(),
-      slackChannelId: config.SLACK_CHANNEL_ID ?? "console-channel",
+      slackChannelId: options.slack.channelId ?? "console-channel",
       email: createConsoleEmailTransport(),
     };
   }
   return {
-    baseUrl: config.LOGBOOK_BASE_URL,
-    slack: config.SLACK_BOT_TOKEN ? createSlackTransport(config.SLACK_BOT_TOKEN) : undefined,
-    slackChannelId: config.SLACK_CHANNEL_ID,
-    email: createEmailTransport(config),
+    baseUrl: options.baseUrl,
+    slack: options.slack.botToken
+      ? createSlackTransport(options.slack.botToken)
+      : unreadable.includes("slack.botToken")
+        ? createUnreadableSlackTransport()
+        : undefined,
+    slackChannelId: options.slack.channelId ?? undefined,
+    email: createEmailTransport(options.email, unreadable),
   };
 }

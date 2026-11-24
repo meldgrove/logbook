@@ -22,7 +22,7 @@ const database = (write: () => Promise<void>) =>
 
 function beatOnce(write: () => Promise<void>, failed: OutageWatch["failed"]) {
   const outage = { failed: vi.fn(failed), answered: vi.fn() };
-  const stop = startHeartbeat({ db: database(write), workerId: "w1", file: path.join(dir, "beat"), channels: {} as never, outage });
+  const stop = startHeartbeat({ db: database(write), workerId: "w1", file: path.join(dir, "beat"), channels: () => ({}) as never, outage });
   return { outage, stop };
 }
 

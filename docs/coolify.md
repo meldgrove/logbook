@@ -33,8 +33,29 @@ server: see [Deployment](deployment.md). Every variable is described in
    and `DIRECTORY` with its settings.
 6. **Deploy**, open `LOGBOOK_BASE_URL`, sign in, and set up people and teams
    ([manual directory](identity-and-access.md#manual-directory) or
-   [Keycloak directory](identity-and-access.md#keycloak-directory)).
+   [Keycloak directory](identity-and-access.md#keycloak-directory)). Set up
+   Slack, email, and the webhook under **Admin › Integrations**, or with
+   [`cli settings`](#settings-from-the-command-line).
 7. **Automatic updates:** set them up as [below](#automatic-updates).
+
+## Settings from the command line
+
+The operator command sets what **Admin › Integrations** sets, without a
+browser ([commands and bodies](deployment.md#settings-from-the-command-line)).
+In the resource, open Terminal, choose the `web` container, and run
+`cli settings list`. `cli settings apply slack` (or `email`, `webhook`)
+waits for the JSON body: paste it, then press Ctrl-D. The terminal
+does not show what is pasted, so the secret stays off the screen. Then run
+`cli settings test slack` or `cli settings test email --to <address>`.
+
+Before Admin › Integrations, Slack, email, and the webhook were environment
+variables of the resource (`SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID`,
+`SMTP_URL`, `MAILERSEND_API_TOKEN`, `MAIL_FROM`, `MAIL_FROM_NAME`,
+`WEBHOOK_URL`, `WEBHOOK_SECRET`). The deploy of the release that brings the
+page copies them into the database once
+([moved from `.env`](deployment.md#moved-from-env)); nothing else is needed.
+Admin › Integrations then names those still set: delete them from the
+resource's environment variables.
 
 ## Upgrades
 

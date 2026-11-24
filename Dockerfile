@@ -2,6 +2,7 @@
 #   web      Next.js server (port 3000)
 #   worker   pg-boss worker: notifications, webhook, Keycloak directory sync
 #   migrate  applies database migrations, then exits
+#   cli      operator commands, e.g. `cli settings list` (src/cli); also on the PATH
 
 FROM node:26.13.1-bookworm-slim AS base
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -30,6 +31,7 @@ COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
 COPY --chown=node:node docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY --chmod=755 docker-cli.sh /usr/local/bin/cli
 # The release workflow sets the version; images built from source have none.
 ARG APP_VERSION=""
 ENV APP_VERSION=${APP_VERSION}

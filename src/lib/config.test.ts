@@ -4,10 +4,11 @@ import {
   parseAuthConfig,
   parseDirectoryConfig,
   parseErrorReportingConfig,
+  movedVariables,
   parseNotificationConfig,
+  parseSealingConfig,
   parseUpdaterConfig,
   parseVersionConfig,
-  parseWebhookConfig,
   validateWebConfig,
   validateWorkerConfig,
 } from "./config";
@@ -144,37 +145,25 @@ describe("parseNotificationConfig", () => {
     expect(parseNotificationConfig({ ...base, NODE_ENV: "production", NOTIFICATION_TRANSPORT: "console" }).NOTIFICATION_TRANSPORT).toBe("console");
   });
 
-  it("treats Slack and email as optional, blank as unset", () => {
-    const config = parseNotificationConfig({ ...base, SLACK_BOT_TOKEN: "", SMTP_URL: " ", MAILERSEND_API_TOKEN: " ", MAIL_FROM: "" });
-    expect(config).toMatchObject({
-      LOGBOOK_BASE_URL: "https://logbook.example.org",
-      SLACK_BOT_TOKEN: undefined,
-      SMTP_URL: undefined,
-      MAILERSEND_API_TOKEN: undefined,
-      MAIL_FROM_NAME: "Logbook",
-    });
+  it("does not read Slack, email, or the webhook: they moved to Admin › Integrations", () => {
+    const config = parseNotificationConfig({ ...base, SLACK_BOT_TOKEN: "xoxp-not-checked", SMTP_URL: "not-a-url", MAIL_FROM: "x" });
+    expect(config).toEqual({ NOTIFICATION_TRANSPORT: "console", LOGBOOK_BASE_URL: "https://logbook.example.org" });
   });
+});
 
-  it("takes a Slack channel ID, not a channel name", () => {
-    expect(parseNotificationConfig({ ...base, SLACK_CHANNEL_ID: "C07LOGBOOK" }).SLACK_CHANNEL_ID).toBe("C07LOGBOOK");
-    expect(() => parseNotificationConfig({ ...base, SLACK_CHANNEL_ID: "#logbook" })).toThrow(/SLACK_CHANNEL_ID/);
+describe("movedVariables", () => {
+  it("returns the old variables that are set, trimmed, and treats blank as unset", () => {
+    expect(
+      movedVariables({ SLACK_BOT_TOKEN: " xoxb-1 ", SMTP_URL: " ", MAIL_FROM: "", WEBHOOK_SECRET: "s".repeat(16), OIDC_CLIENT_ID: "x" }),
+    ).toEqual({ SLACK_BOT_TOKEN: "xoxb-1", WEBHOOK_SECRET: "s".repeat(16) });
   });
+});
 
-  it("rejects a user token for Slack", () => {
-    expect(() => parseNotificationConfig({ ...base, SLACK_BOT_TOKEN: "xoxp-123" })).toThrow(/SLACK_BOT_TOKEN/);
-  });
-
-  it("needs a sender for email, and one way to send it", () => {
-    expect(parseNotificationConfig({ ...base, SMTP_URL: "smtps://user:pass@mail.example.org:465", MAIL_FROM: "logbook@example.org" }).SMTP_URL).toBe(
-      "smtps://user:pass@mail.example.org:465",
-    );
-    expect(() => parseNotificationConfig({ ...base, SMTP_URL: "smtp://mail.example.org" })).toThrow(/MAIL_FROM/);
-    expect(() => parseNotificationConfig({ ...base, MAILERSEND_API_TOKEN: "mlsn.abc" })).toThrow(/MAIL_FROM/);
-    expect(() => parseNotificationConfig({ ...base, MAILERSEND_API_TOKEN: "mlsn.abc", MAIL_FROM: "not-an-email" })).toThrow(/MAIL_FROM/);
-    expect(() => parseNotificationConfig({ ...base, SMTP_URL: "https://mail.example.org", MAIL_FROM: "logbook@example.org" })).toThrow(/SMTP_URL/);
-    expect(() =>
-      parseNotificationConfig({ ...base, SMTP_URL: "smtp://mail.example.org", MAILERSEND_API_TOKEN: "mlsn.abc", MAIL_FROM: "logbook@example.org" }),
-    ).toThrow(/either SMTP_URL or MAILERSEND_API_TOKEN/);
+describe("parseSealingConfig", () => {
+  it("leaves BETTER_AUTH_SECRET optional outside the web process, but long when set", () => {
+    expect(parseSealingConfig({}).BETTER_AUTH_SECRET).toBeUndefined();
+    expect(parseSealingConfig({ BETTER_AUTH_SECRET: " " }).BETTER_AUTH_SECRET).toBeUndefined();
+    expect(() => parseSealingConfig({ BETTER_AUTH_SECRET: "short" })).toThrow(/at least 32/);
   });
 });
 
@@ -185,16 +174,22 @@ describe("validateWorkerConfig", () => {
       validateWorkerConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbook", LOGBOOK_BASE_URL: "https://logbook.example.org", ...manualDirectory }),
     ).not.toThrow();
   });
-});
 
-describe("parseWebhookConfig", () => {
-  it("is off without a URL and needs a long secret once the URL is set", () => {
-    expect(parseWebhookConfig({ WEBHOOK_URL: "" })).toEqual({ WEBHOOK_URL: undefined, WEBHOOK_SECRET: undefined });
-    expect(() => parseWebhookConfig({ WEBHOOK_URL: "https://hooks.example.org/logbook" })).toThrow(/WEBHOOK_SECRET/);
-    expect(() => parseWebhookConfig({ WEBHOOK_URL: "https://hooks.example.org/logbook", WEBHOOK_SECRET: "short" })).toThrow(/WEBHOOK_SECRET/);
-    expect(parseWebhookConfig({ WEBHOOK_URL: "https://hooks.example.org/logbook", WEBHOOK_SECRET: "s".repeat(32) }).WEBHOOK_URL).toBe(
-      "https://hooks.example.org/logbook",
-    );
+  it("starts with the variables an earlier compose.yaml passes: no BETTER_AUTH_SECRET, old values that are not checked", () => {
+    expect(() =>
+      validateWorkerConfig({
+        DATABASE_URL: "postgres://u:p@db:5432/logbook",
+        LOGBOOK_BASE_URL: "https://logbook.example.org",
+        ...manualDirectory,
+        SLACK_BOT_TOKEN: "xoxb-1",
+        SLACK_CHANNEL_ID: "#not-an-id",
+        SMTP_URL: "smtp://mail.example.org",
+        MAIL_FROM: "logbook@example.org",
+        MAIL_FROM_NAME: "",
+        WEBHOOK_URL: "https://hooks.example.org/logbook",
+        WEBHOOK_SECRET: "short",
+      }),
+    ).not.toThrow();
   });
 });
 

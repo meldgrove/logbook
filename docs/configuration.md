@@ -1,8 +1,15 @@
 # Configuration
 
-Logbook reads its configuration from environment variables. Blank values count
-as unset, except for `UPDATER_URL`. Every process validates what it needs at
-startup and stops with a list of missing or invalid variables.
+Logbook reads what it needs before it can reach its database from
+environment variables. Blank values count as unset, except for
+`UPDATER_URL`. Every process validates what it needs at startup and stops
+with a list of missing or invalid variables.
+
+Slack, email, and the webhook are not environment variables: admins set them
+under **Admin › Integrations**, and operators with
+[`cli settings`](deployment.md#settings-from-the-command-line). They live in
+the database, their secrets encrypted with `BETTER_AUTH_SECRET`
+([below](#slack-email-and-the-webhook)).
 
 Three processes run from one image (see [deployment](deployment.md)):
 `migrate`, `web`, and `worker`. The tables below say which process needs a
@@ -14,7 +21,7 @@ variable.
 |---|---|---|
 | `DATABASE_URL` | all | `postgres://user:password@host:5432/logbook` |
 | `LOGBOOK_BASE_URL` | web, worker | The public URL, e.g. `https://logbook.example.org`. Used for login redirects and links in messages |
-| `BETTER_AUTH_SECRET` | web | At least 32 characters: `openssl rand -base64 32`. Signs session cookies |
+| `BETTER_AUTH_SECRET` | all | At least 32 characters: `openssl rand -base64 32`. Signs session cookies, and encrypts stored sign-in tokens and the secrets of Admin › Integrations. Required by `web`; `worker`, `migrate`, and `cli` need it to read and store those secrets |
 | `OIDC_ISSUER` | web | Issuer URL of the OpenID Connect provider, e.g. `https://auth.example.org/realms/acme` |
 | `OIDC_CLIENT_ID` | web | Client ID registered for Logbook |
 | `OIDC_CLIENT_SECRET` | web | Its client secret |
@@ -72,22 +79,30 @@ channel too. Without either channel, Logbook only shows tasks in the app.
 
 | Variable | Default | Value |
 |---|---|---|
-| `SLACK_BOT_TOKEN` | none | Bot token (`xoxb-…`) of a Slack app with the scopes `chat:write`, `users:read`, and `users:read.email` |
-| `SLACK_CHANNEL_ID` | none | Channel ID (`C…`) for one post per new entry. Invite the app to the channel |
-| `SMTP_URL` | none | `smtp://user:password@host:587` (STARTTLS) or `smtps://user:password@host:465`. Percent-encode special characters in the password |
-| `MAILERSEND_API_TOKEN` | none | MailerSend API token with email sending access. Use either SMTP or MailerSend |
-| `MAIL_FROM` | none | Sender address; required with SMTP or MailerSend |
-| `MAIL_FROM_NAME` | `Logbook` | Sender name |
-| `NOTIFICATION_TRANSPORT` | `live` in production, otherwise `console` | `console` only logs messages instead of sending them |
+| `NOTIFICATION_TRANSPORT` | `live` in production, otherwise `console` | `console` only logs messages instead of sending them, also the test messages of Admin › Integrations |
 
-## Webhook (worker)
+## Slack, email, and the webhook
 
-| Variable | Default | Value |
-|---|---|---|
-| `WEBHOOK_URL` | none | HTTPS endpoint that receives published entries. Off without it |
-| `WEBHOOK_SECRET` | none | At least 16 characters; required with `WEBHOOK_URL`. Signs every request |
+Set under **Admin › Integrations** (`/admin/integrations`), or on the server
+with `cli settings apply slack|email|webhook`
+([bodies](deployment.md#settings-from-the-command-line)). The worker reads
+them before each round of sending, so a change needs no restart.
 
-See [webhook](webhooks.md).
+| Setting | What it holds |
+|---|---|
+| `slack` | The bot token (`xoxb-…`) of a Slack app with the scopes `chat:write`, `users:read`, and `users:read.email`, and the channel ID (`C…`) for one post per new entry. Invite the app to the channel |
+| `email` | SMTP (server, port, encryption `starttls`, `tls`, `auto`, or `none`, user name, password) or MailerSend (an API token with email sending access), the sender address, and the sender name (default `Logbook`) |
+| `webhook` | The HTTPS endpoint that receives published entries, and its signing secret (at least 16 characters). See [webhook](webhooks.md) |
+
+Earlier versions read these variables; each process that sees one copies it
+into the database once, then ignores it
+([moved from `.env`](deployment.md#moved-from-env)):
+
+| Variable | Now |
+|---|---|
+| `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID` | `slack` |
+| `SMTP_URL`, `MAILERSEND_API_TOKEN`, `MAIL_FROM`, `MAIL_FROM_NAME` | `email` |
+| `WEBHOOK_URL`, `WEBHOOK_SECRET` | `webhook` |
 
 ## Error reporting (web, worker)
 

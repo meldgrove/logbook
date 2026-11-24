@@ -30,9 +30,11 @@ Meldgrove apps, Radix), sonner, pino, Vitest, Playwright.
 - `src/lib/<module>/`: `auth`, `directory` (manual and Keycloak directory),
   `db`, `entries`, `process`, `calendar`, `audit`, `health`, `jobs`,
   `security`, `notifications`, `measures`, `webhooks`, `csv-import`,
-  `updates` (the updater's API for the update button).
+  `updates` (the updater's API for the update button), `integrations`
+  (Slack, email, and the webhook: Admin › Integrations and `cli settings`).
 - `src/workers/`: the pg-boss worker. `src/scripts/`: migrate, directory
-  sync, and the CSV import. Both are bundled with esbuild into `dist/`.
+  sync, and the CSV import. `src/cli/`: the operator command (`cli` in the
+  image). All are bundled with esbuild into `dist/`.
 - `drizzle/`: SQL migrations. `e2e/`: Playwright. `tests/`: test helpers and
   fixtures. Unit tests sit next to the code (`*.test.ts`), integration tests
   too (`*.int.test.ts`).
@@ -102,6 +104,14 @@ Meldgrove apps, Radix), sonner, pino, Vitest, Playwright.
   redirect to the same page shows stale data.
 - Change the schema in `src/lib/db/schema.ts`, then run `npm run db:generate`
   and commit the migration. CI fails if they differ.
+- Slack, email, and the webhook live in the database, not in the
+  environment: `src/lib/integrations/service.ts` saves, checks, seals
+  (AES-256-GCM with a key derived from `BETTER_AUTH_SECRET`), audits, and
+  tests them. The page's Server Actions and `cli settings` both call it; the
+  command acts as the operator (`operator()` in `src/lib/audit/actor.ts`,
+  created only in `src/cli/`). The worker reads them each round
+  (`runtime.ts`). Their old variables are copied once on start
+  (`moved-variables.ts`); never read them anywhere else.
 - Read application settings only through `src/lib/config.ts`, and
   operational settings (`LOG_LEVEL`, `LOGBOOK_PROCESS`,
   `WORKER_HEARTBEAT_FILE`, `MIGRATIONS_DIR`) through `envValue()` in
@@ -122,6 +132,7 @@ npm ci
 npm run db:migrate
 npm run dev                                # http://localhost:3000, users erika / adam / olga, password logbook-dev
 npm run worker                             # pg-boss worker in a second terminal
+npm run cli -- settings list               # the operator command (docs/deployment.md)
 
 npm run lint
 npm run typecheck

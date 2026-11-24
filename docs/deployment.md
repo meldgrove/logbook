@@ -19,6 +19,7 @@ process:
 | `web` | The Next.js server on port 3000 |
 | `worker` | Background jobs: notifications, reminders, the webhook, and the Keycloak directory sync. One is enough; more can run, since jobs are coordinated through the database |
 | `directory-sync` | Runs one Keycloak directory sync, then exits |
+| `cli` | The operator command: sets Slack, email, and the webhook without a browser ([settings from the command line](#settings-from-the-command-line)) |
 
 Logbook needs PostgreSQL 18. Background jobs (pg-boss) keep their tables in
 the `pgboss` schema of the same database.
@@ -113,6 +114,7 @@ run the commands as root (`sudo -i`).
    `DATABASE_URL`, a new `BETTER_AUTH_SECRET`
    (`openssl rand -base64 32`), the `OIDC_*` variables, and `DIRECTORY` with
    its settings. Remove `NOTIFICATION_TRANSPORT` (production sends for real).
+   Slack, email, and the webhook are not set here: see step 7.
 
    Without a PostgreSQL of your own, set these values for the database.
    `COMPOSE_FILE` makes every `docker compose` command also use
@@ -147,7 +149,9 @@ run the commands as root (`sudo -i`).
 
 7. Open `LOGBOOK_BASE_URL`, sign in, and set up people and teams
    ([manual directory](identity-and-access.md#manual-directory) or
-   [Keycloak directory](identity-and-access.md#keycloak-directory)).
+   [Keycloak directory](identity-and-access.md#keycloak-directory)). Set up
+   Slack, email, and the webhook under **Admin › Integrations**, or on the
+   server with [`cli settings`](#settings-from-the-command-line).
 8. **Automatic updates:** [set them up](#setup-on-the-server).
 
 ## Health checks
@@ -167,7 +171,9 @@ admin page shows the worker's last heartbeat.
 - **Logs** are JSON lines on stdout. The `service` field names the process.
 - **Admin page** (`/admin`): directory sync status, notification channels and
   failures, webhook deliveries, the default periods of the decision
-  process, and [updates](#automatic-updates).
+  process, and [updates](#automatic-updates). **Admin › Integrations**
+  (`/admin/integrations`) sets up Slack, email, and the webhook; the worker
+  picks up a change within seconds, without a restart.
 - **Upgrades**: read the release notes of every release since yours and
   take their steps. Back up the database first: migrations only move
   forward. `migrate` applies new migrations before `web` and `worker` start.
@@ -175,6 +181,130 @@ admin page shows the worker's last heartbeat.
   then install the release with the [update button](#the-update-button), or
   set `LOGBOOK_VERSION` in `.env` and run
   `docker compose up -d --pull always`.
+
+## Settings from the command line
+
+Everything under **Admin › Integrations** can also be set on the server,
+without a browser, with the operator command `cli`. It runs the page's own
+code: the same checks, the same encryption, and the same audit log, which
+names the actor `operator` and the command. It starts no server, and exits.
+
+```sh
+cd /srv/logbook
+docker compose run --rm -T migrate cli settings list
+```
+
+In a running container, such as a terminal on Coolify, the command is just
+`cli …` (`docker compose exec web cli settings list`).
+
+| Command | What it does |
+|---|---|
+| `cli settings list [--json]` | Each setting: `set`, `not set`, or `incomplete`, with hints such as `token …a1b2`. Never a secret |
+| `cli settings show <name>` | The setting as JSON, as the page shows it: secrets only as hints |
+| `cli settings apply <name>` | Saves the JSON body on stdin, as the page's **Save** does; prints what `show` prints |
+| `cli settings test slack` | Checks the bot token with Slack and posts a test message to the channel |
+| `cli settings test email --to <address>` | Sends a test email to the address |
+| `cli help` | The commands and the setting names |
+
+- Settings: `slack`, `email`, and `webhook`.
+- Secrets go only in the body on stdin, never in an argument (arguments show
+  in `ps` and the shell history). Nothing prints a saved secret. A body
+  pasted into a terminal is not shown: paste it, then press Ctrl-D.
+- `apply` replaces the whole setting, as the page does: start from what
+  `show` prints, which `apply` takes back. As on the page, a missing or
+  empty secret keeps the saved one; `null` removes it. An `email` body
+  without `smtp` keeps the saved SMTP settings.
+- Exit codes: `0` done; `1` refused, with the page's message and the field
+  on stderr; `2` a wrong command or a body that is not JSON.
+- Logbook has no lists of settings and issues no tokens, so there is no
+  `cli settings remove` and no `cli tokens`.
+- The command needs `BETTER_AUTH_SECRET` to store a secret. The
+  `compose.yaml` of this release passes it to every service.
+
+The bodies, as the Integrations page sends them:
+
+`slack`: the bot token (`xoxb-…`) of a Slack app with the scopes
+`chat:write`, `users:read`, and `users:read.email`, and the ID of the channel
+for one post per new entry (optional; invite the app to it).
+
+```json
+{ "botToken": "<bot token>", "channelId": "C0123456789" }
+```
+
+`email` over SMTP (`security`: `tls` on port 465, `starttls` on 587,
+`auto` for STARTTLS only when the server offers it, or `none`). Leave out
+`username` and `password` for a server without login. A changed `host`, or
+weaker `security`, needs the password again. `fromName` defaults to
+`Logbook`. `{"provider": "none"}` turns email off.
+
+```json
+{
+  "provider": "smtp",
+  "fromAddress": "logbook@example.org",
+  "fromName": "Logbook",
+  "smtp": {
+    "host": "mail.example.org",
+    "port": 587,
+    "security": "starttls",
+    "username": "logbook@example.org",
+    "password": "<password>"
+  }
+}
+```
+
+`email` over MailerSend (an API token with email sending access):
+
+```json
+{
+  "provider": "mailersend",
+  "fromAddress": "logbook@example.org",
+  "fromName": "Logbook",
+  "mailersend": { "token": "<API token>" }
+}
+```
+
+`webhook`: the URL that receives published entries, and the secret that
+signs each request ([webhook](webhooks.md)), at least 16 characters, such as
+the one Meldgrove Connector shows. `{"url": null}` turns the webhook off.
+The webhook has no test.
+
+```json
+{ "url": "https://hooks.example.org/logbook", "secret": "<signing secret>" }
+```
+
+AI with access to the server sets a key this way: it receives the secret as
+a file, pipes the body into `cli settings apply`, runs `cli settings test`,
+and deletes the file. With `jq`, the secret never appears in an argument:
+
+```sh
+jq -n --rawfile token slack-token '{botToken: ($token | rtrimstr("\n")), channelId: "C0123456789"}' \
+  | docker compose run --rm -T migrate cli settings apply slack
+docker compose run --rm -T migrate cli settings test slack
+rm slack-token
+```
+
+### Moved from `.env`
+
+Versions before Admin › Integrations read Slack, email, and the webhook from
+`.env`: `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID`, `SMTP_URL`,
+`MAILERSEND_API_TOKEN`, `MAIL_FROM`, `MAIL_FROM_NAME`, `WEBHOOK_URL`, and
+`WEBHOOK_SECRET`. Servers keep working without a step:
+
+- On start, the worker (and any other process that sees them) copies each
+  of these variables into the database once, into a field that is still
+  empty, with the page's checks. The audit log names the actor
+  `environment`. From then on the database wins and the variables are
+  ignored, also after an admin clears a field. An `smtp://` URL becomes
+  `auto` (STARTTLS when the server offers it, as before) on port 587 unless
+  it names another, `smtps://` becomes `tls` on 465.
+- Admin › Integrations, `cli settings list`, and one warning in the log at
+  start name each of them that is still set. Delete them from `.env` once
+  you no longer plan to go back to an earlier version, which reads them.
+- The worker needs `BETTER_AUTH_SECRET` to store and read the secrets. The
+  `compose.yaml` of earlier versions passes it to `web` only: with that
+  file, the worker keeps sending with the variables, as before, cannot
+  read what is saved on the page, and Admin › Integrations says so. Take the `compose.yaml` of this release
+  (`git pull`) and run `docker compose up -d`; the worker then copies them.
 
 ## Backups
 
@@ -191,9 +321,12 @@ While `BACKUP_URL` is empty, it idles.
 3. Let the backup end before the update window (`UPDATE_WINDOW`): automatic
    updates run migrations without anyone present.
 
-Keep `BETTER_AUTH_SECRET` apart from the backups (stored sign-in tokens are
-encrypted with it; without it, people sign in again): a restore needs it, the
+Keep `BETTER_AUTH_SECRET` apart from the backups: a restore needs it, the
 backups do not hold it, and Backups shows the name on the source page.
+Stored sign-in tokens and the secrets of Admin › Integrations (Slack's bot
+token, the SMTP password or MailerSend's token, the webhook's signing secret)
+are encrypted with it. Without it, people sign in again, and an admin enters
+those secrets again.
 
 With [automatic updates](#automatic-updates), run the updater's host setup
 again once the app's folder has updater 0.2.2 or later (`git pull`): its

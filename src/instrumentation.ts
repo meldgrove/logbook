@@ -9,6 +9,11 @@ export async function register() {
     const { sentryOptions } = await import("@/lib/error-reporting");
     const options = sentryOptions(getErrorReportingConfig(), "web");
     if (options) Sentry.init(options);
+    // Variables of Slack, email, and the webhook that the web process sees
+    // go to Admin › Integrations once. In the background: the server starts
+    // also while the database is down, and the worker copies them as well.
+    const { importAtStart } = await import("@/lib/integrations/start");
+    void importAtStart();
   }
 }
 

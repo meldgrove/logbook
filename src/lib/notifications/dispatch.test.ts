@@ -11,7 +11,7 @@ afterEach(() => {
 async function runOnce(transaction: () => Promise<unknown>, connectionError: boolean) {
   const outage = { failed: vi.fn(() => connectionError), answered: vi.fn() };
   const db = { transaction } as unknown as Database;
-  const stop = startDispatcher({ db, transports: { baseUrl: "http://localhost:3000" }, intervalMs: 60_000, outage });
+  const stop = startDispatcher({ db, transports: async () => ({ baseUrl: "http://localhost:3000" }), intervalMs: 60_000, outage });
   await stop();
   return outage;
 }
