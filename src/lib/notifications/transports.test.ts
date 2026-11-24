@@ -306,6 +306,21 @@ describe("createTransports", () => {
     expect(channelModes(transports)).toEqual({ slack: "live", slackChannel: "live", email: "live" });
   });
 
+  it("fails each send of a channel whose saved secret cannot be read, instead of turning it off", async () => {
+    const smtp = { ...off.email, provider: "smtp" as const, fromAddress: "logbook@example.org", smtp: { ...off.email.smtp, host: "mail.example.org", username: "user" } };
+    const transports = createTransports({ ...base, slack: { botToken: null, channelId: "C0123456" }, email: smtp, unreadable: ["slack.botToken", "email.smtp.password"] });
+    expect(channelModes(transports)).toEqual({ slack: "off", slackChannel: "off", email: "off" });
+    const permanent = expect.objectContaining({ name: "DeliveryError", permanent: true });
+    await expect(transports.slack!.postMessage("C0123456", "text")).rejects.toEqual(permanent);
+    await expect(transports.slack!.lookupUserByEmail("amy@example.org")).rejects.toEqual(permanent);
+    const email = { to: "amy@example.org", toName: "Amy", subject: "", text: "", html: "" };
+    await expect(transports.email!.send(email)).rejects.toThrow("The SMTP password cannot be read by the worker: see Admin › Integrations.");
+    const mailersend = { ...off.email, provider: "mailersend" as const, fromAddress: "logbook@example.org" };
+    await expect(createTransports({ ...base, ...off, email: mailersend, unreadable: ["email.mailersend.token"] }).email!.send(email)).rejects.toThrow("The MailerSend API token");
+    // The secret of a channel that is not used does not matter.
+    expect(createTransports({ ...base, ...off, email: off.email, unreadable: ["email.smtp.password", "email.mailersend.token"] }).email).toBeUndefined();
+  });
+
   it("only logs in console mode, whatever is saved", () => {
     const transports = createTransports({ ...base, mode: "console", ...off });
     expect(channelModes(transports)).toEqual({ slack: "console", slackChannel: "console", email: "console" });

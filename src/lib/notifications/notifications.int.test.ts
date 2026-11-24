@@ -22,7 +22,7 @@ import { proposalDraftSchema, publishSchema, type ProposalDraftInput } from "@/l
 import { dispatchDue, MAX_ATTEMPTS, retrySlackLookups } from "./dispatch";
 import { notifyLostAccess, recordReminders } from "./notify";
 import { getNotificationStatus } from "./queries";
-import { DeliveryError, type Email, type SlackTransport, type Transports } from "./transports";
+import { createTransports, DeliveryError, type Email, type SlackTransport, type Transports } from "./transports";
 
 const testDb = connectTestDatabase();
 
@@ -456,6 +456,20 @@ describe("the worker's sender", () => {
     await dispatchDue(db, fake.transports, () => WEDNESDAY);
     const toDan = (await deliveries("proposal.submitted")).find((d) => d.recipientId === dan.personId);
     expect(toDan).toMatchObject({ status: "pending", attempts: 1, lastError: "Slack chat.postMessage: invalid_auth. Email is not configured." });
+  });
+
+  it("keeps messages to retry while a saved secret cannot be read, and skips none", async () => {
+    await submitted();
+    const off = { provider: "none" as const, fromAddress: "", fromName: "", smtp: { host: "", port: 587, security: "starttls" as const, username: "", password: null }, mailersendToken: null };
+    const transports = createTransports({ mode: "live", baseUrl: "https://logbook.example", slack: { botToken: null, channelId: "C0123456" }, email: off, unreadable: ["slack.botToken"] });
+    expect(await dispatchDue(db, transports, () => WEDNESDAY)).toEqual({ sent: 0, skipped: 0, retry: 4, failed: 0 });
+    for (const delivery of await deliveries()) {
+      expect(delivery).toMatchObject({ status: "pending", attempts: 1 });
+      expect(delivery.lastError).toContain("The Slack bot token cannot be read by the worker: see Admin › Integrations.");
+    }
+    // Read again (the token was entered): everything goes out.
+    const fake = fakeTransports({ slackUsers: users });
+    expect(await dispatchDue(db, fake.transports, () => new Date(WEDNESDAY.getTime() + 60_000))).toEqual({ sent: 4, skipped: 0, retry: 0, failed: 0 });
   });
 
   it("looks up people without a Slack account again after a week", async () => {

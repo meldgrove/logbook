@@ -52,7 +52,9 @@ interface Smtp {
  * is TLS (465); smtp:// (587) is STARTTLS when the server offers it (`auto`),
  * required with `requireTLS`, which wins over `ignoreTLS`, never with
  * `ignoreTLS` alone. The scheme decides TLS: a `secure` query never
- * overrode it.
+ * overrode it. A user name without a password is left out: nodemailer could
+ * not sign in with it and sent without signing in to a server that asks for
+ * none.
  */
 export function smtpFromUrl(value: string): Smtp | undefined {
   let url: URL;
@@ -81,7 +83,7 @@ export function smtpFromUrl(value: string): Smtp | undefined {
     host: url.hostname,
     port: url.port ? Number(url.port) : tls ? 465 : 587,
     security: (tls ? "tls" : flag("requireTLS") ? "starttls" : flag("ignoreTLS") ? "none" : "auto") as SmtpSecurity,
-    username: decode(url.username),
+    username: url.password ? decode(url.username) : "",
     password: url.password ? decode(url.password) : null,
   };
   const checked = smtpInputSchema.safeParse({ ...smtp, password: smtp.password ?? undefined });

@@ -343,8 +343,9 @@ describe("the worker", () => {
   it("says when it has no BETTER_AUTH_SECRET, also without old variables to fall back on", async () => {
     const runtime = createIntegrationsRuntime({ db: () => db, key: null, mode: "live", baseUrl: "https://logbook.example", env: {} });
     await saveIntegration(db, "slack", { botToken: TOKEN }, amy, KEY);
-    expect((await runtime.transports()).slack).toBeUndefined();
-    expect(runtime.channels()).toMatchObject({ settingsFromEnvironment: false, withoutKey: true });
+    // On, but unreadable: messages are tried again, not skipped.
+    expect((await runtime.transports()).slack!.mode).toBe("unreadable");
+    expect(runtime.channels()).toMatchObject({ slack: "off", settingsFromEnvironment: false, withoutKey: true });
     await db.insert(workerHeartbeat).values({ workerId: "w1", startedAt: new Date(), beatAt: new Date(), channels: runtime.channels() });
     expect((await integrationViews(db)).slack.warnings).toEqual([
       'The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it cannot read the secrets saved here. Give it the compose.yaml of this release (docs/deployment.md, "Moved from .env").',

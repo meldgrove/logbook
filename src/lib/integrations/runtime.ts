@@ -5,7 +5,7 @@ import { channelModes, createTransports, type Transports } from "@/lib/notificat
 import type { NotificationChannels } from "@/lib/notifications/types";
 import type { SealingKey } from "./crypto";
 import { settingsFromEnvironment } from "./moved-variables";
-import { loadStored, openStored, type Unreadable, type WebhookSettings } from "./store";
+import { loadStored, openStored, type Integrations, type Unreadable, type WebhookSettings } from "./store";
 
 /*
  * The worker's view of Admin › Integrations. It reads the settings again
@@ -47,11 +47,11 @@ export function createIntegrationsRuntime(options: {
   let current: Current | undefined;
   const reported = new Set<Unreadable>();
 
-  function build(settings: ReturnType<typeof settingsFromEnvironment>["integrations"], stamp: string): Current {
+  function build(settings: Integrations, stamp: string, unreadable: readonly Unreadable[] = []): Current {
     const webhook = settings.webhook.url && settings.webhook.secret ? settings.webhook : null;
     return {
       stamp,
-      transports: createTransports({ mode: options.mode, baseUrl: options.baseUrl, slack: settings.slack, email: settings.email }),
+      transports: createTransports({ mode: options.mode, baseUrl: options.baseUrl, slack: settings.slack, email: settings.email, unreadable }),
       webhook,
     };
   }
@@ -75,7 +75,7 @@ export function createIntegrationsRuntime(options: {
           : "the worker has no BETTER_AUTH_SECRET, so it cannot read the secrets of Admin › Integrations: give it the compose.yaml of this release",
       );
     }
-    current = build(integrations, stamp);
+    current = build(integrations, stamp, unreadable);
     return current;
   }
 

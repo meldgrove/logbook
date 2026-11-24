@@ -18,6 +18,8 @@ describe("smtpFromUrl", () => {
       username: "",
       password: null,
     });
+    // A user name without a password signs in nowhere: the relay gets the mail without a sign-in, as before.
+    expect(smtpFromUrl("smtp://logbook@relay.internal:25")).toMatchObject({ host: "relay.internal", username: "", password: null });
     expect(smtpFromUrl("smtp://relay.internal:25?ignoreTLS=true")?.security).toBe("none");
     expect(smtpFromUrl("smtp://mail.example.org?requireTLS=true")?.security).toBe("starttls");
     // As nodemailer reads the options: requireTLS wins over ignoreTLS, 1 counts as true, the scheme decides TLS.
