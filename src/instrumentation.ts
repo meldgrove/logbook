@@ -4,8 +4,9 @@ import * as Sentry from "@sentry/nextjs";
 // instead of failing later on the first request.
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { getErrorReportingConfig, validateWebConfig } = await import("@/lib/config");
-    validateWebConfig();
+    const { validateWebConfigOrExit } = await import("@/lib/startup");
+    validateWebConfigOrExit();
+    const { getErrorReportingConfig } = await import("@/lib/config");
     const { sentryOptions } = await import("@/lib/error-reporting");
     const options = sentryOptions(getErrorReportingConfig(), "web");
     if (options) Sentry.init(options);
