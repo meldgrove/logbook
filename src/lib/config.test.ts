@@ -130,6 +130,12 @@ describe("validateWebConfig", () => {
     expect(message).not.toContain("received undefined");
   });
 
+  it("names LOGBOOK_BASE_URL when compose.yaml passes it empty: neither name is in .env", () => {
+    const fromCompose = { DATABASE_URL: "postgres://u:p@db:5432/logbook", ...auth, ...manualDirectory, LOGBOOK_BASE_URL: "" };
+    expect(() => validateWebConfig(fromCompose)).toThrow("- LOGBOOK_BASE_URL: is required");
+    expect(() => validateWorkerConfig(fromCompose)).toThrow("- LOGBOOK_BASE_URL: is required");
+  });
+
   it("passes with a complete configuration", () => {
     expect(() => validateWebConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbook", ...auth, ...manualDirectory })).not.toThrow();
     expect(() => validateWebConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbook", ...auth, ...keycloakDirectory })).not.toThrow();

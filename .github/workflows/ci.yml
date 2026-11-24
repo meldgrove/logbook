@@ -169,6 +169,37 @@ jobs:
           --health-interval 5s --health-timeout 3s --health-retries 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Docker Compose 2.x (this runner's) checks a :? inside a fallback even
+      # when the variable before it is set. A new server's .env has only the
+      # new names; one from before the rename may have only LOGBUCH_*.
+      - name: The compose files take only the new or only the old names
+        run: |
+          docker compose version
+          shared=(POSTGRES_PASSWORD=ci-only DATABASE_URL=postgres://logbook:ci-only@postgres:5432/logbook
+            BETTER_AUTH_SECRET=ci-only OIDC_ISSUER=https://sso.example.invalid/realms/logbook
+            OIDC_CLIENT_ID=logbook OIDC_CLIENT_SECRET=ci-only INITIAL_ADMIN_EMAILS=admin@example.invalid)
+          printf '%s\n' "${shared[@]}" LOGBOOK_VERSION=0.3 LOGBOOK_BASE_URL=https://logbook.example.invalid >"$RUNNER_TEMP/new.env"
+          printf '%s\n' "${shared[@]}" LOGBUCH_VERSION=0.3 LOGBUCH_BASE_URL=https://logbook.example.invalid >"$RUNNER_TEMP/old.env"
+          printf '%s\n' "${shared[@]}" LOGBOOK_BASE_URL=https://logbook.example.invalid >"$RUNNER_TEMP/no-version.env"
+          for names in new old; do
+            echo "Only the $names names"
+            for files in "-f compose.yaml -f compose.postgres.yaml" "-f compose.coolify.yaml"; do
+              # shellcheck disable=SC2086 # the -f options
+              docker compose --env-file "$RUNNER_TEMP/$names.env" $files config --format json |
+                jq -e '.services.web | .image == "ghcr.io/meldgrove/logbook:0.3" and .environment.LOGBOOK_BASE_URL == "https://logbook.example.invalid"'
+            done
+          done
+          # Without a version, the tag is the hint, which no image can have:
+          # Compose refuses it before it pulls the image.
+          for files in "-f compose.yaml" "-f compose.coolify.yaml"; do
+            # shellcheck disable=SC2086 # two words: the option and the file
+            if output=$(docker compose --env-file "$RUNNER_TEMP/no-version.env" $files pull migrate 2>&1); then
+              echo "Compose pulled an image without LOGBOOK_VERSION"
+              exit 1
+            fi
+            echo "$output"
+            grep -q "logbook:set LOGBOOK_VERSION in .env to a release.*invalid reference format" <<<"$output"
+          done
       - run: docker build -t logbook:ci .
       - name: The image runs as a non-root user
         run: test "$(docker run --rm --entrypoint id logbook:ci -u)" = "1000"
@@ -186,7 +217,7 @@ jobs:
     name: Compose files of the newest release
     permissions:
       contents: read
-    uses: meldgrove/.github/.github/workflows/compose-compat.yml@401e2112820727724d7143307850eaeceac6d5f0 # v1.2.0
+    uses: meldgrove/.github/.github/workflows/compose-compat.yml@be24d5a706d2e266492e3e910a23cde3d04aef36 # v1.2.1
     with:
       version_variable: LOGBOOK_VERSION
       env_file: .github/compose-compat.env
