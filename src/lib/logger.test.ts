@@ -36,11 +36,12 @@ it("redacts the secrets of an Admin › Integrations body", () => {
   logger.info({
     body: {
       botToken: "xoxb-private-1",
+      url: "https://hooks.example.org/private-path",
       secret: "private-webhook-secret",
       smtp: { password: "private-smtp-password" },
       mailersend: { token: "private-mailersend-token" },
     },
-    settings: { mailersendToken: "private-mailersend-token", webhook: { secret: "private-webhook-secret" } },
+    settings: { mailersendToken: "private-mailersend-token", webhook: { url: "https://hooks.example.org/private-path", secret: "private-webhook-secret" } },
   }, "body");
   expect(lines.join("\n")).not.toMatch(/private/);
   expect(JSON.parse(lines[0]!).body.smtp.password).toBe("[redacted]");

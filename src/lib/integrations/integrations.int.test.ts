@@ -1,12 +1,15 @@
-import { like } from "drizzle-orm";
+import { createServer, type AddressInfo } from "node:net";
+import { eq, like } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectTestDatabase } from "../../../tests/integration/db";
 import { seedDirectory } from "../../../tests/integration/seed";
 import { appSetting, auditEvent, workerHeartbeat } from "@/lib/db/schema";
-import { deriveSealingKey } from "./crypto";
-import { importMovedVariables } from "./moved-variables";
+import { z } from "zod";
+import { createWebhookClient } from "@/lib/webhooks/client";
+import { deriveSealingKey, seal } from "./crypto";
 import { createIntegrationsRuntime } from "./runtime";
-import { IntegrationError, integrationViews, saveIntegration, testEmail, testSlack, viewContext } from "./service";
+import { IntegrationError, integrationViews, saveIntegration, testEmail, testSlack } from "./service";
+import { sealWebhookUrl } from "./start";
 
 const testDb = connectTestDatabase();
 const { db } = testDb;
@@ -17,6 +20,14 @@ const OTHER_KEY = deriveSealingKey("o".repeat(32));
 const TOKEN = "xoxb-integration-secret-7f3a";
 const PASSWORD = "smtp-secret-password-9c1d";
 const SIGNING = "webhook-signing-secret-2b8e";
+const HOOK_SECRETS = ["user-4d1e", "pass-6f2a", "path-token-8b3c", "query-token-0d5f"] as const;
+const HOOK = `https://${HOOK_SECRETS[0]}:${HOOK_SECRETS[1]}@hooks.example.org:8443/${HOOK_SECRETS[2]}?key=${HOOK_SECRETS[3]}`;
+const ORIGIN = "https://hooks.example.org:8443";
+
+function expectHidden(...values: unknown[]) {
+  const text = values.map((value) => JSON.stringify(value)).join();
+  for (const secret of HOOK_SECRETS) expect(text).not.toContain(secret);
+}
 
 beforeEach(async () => {
   await testDb.reset();
@@ -69,8 +80,6 @@ describe("saving on the page and with the command", () => {
     expect(kept.view).toMatchObject({ botTokenSaved: true, botTokenHint: "…7f3a", channelId: null });
     const removed = await saveIntegration(db, "slack", { botToken: null }, amy, KEY);
     expect(removed.view).toMatchObject({ state: "not set", botTokenSaved: false });
-    // The row stays: an old variable is not copied over a setting an admin turned off.
-    expect(await rows()).toHaveProperty("slack");
   });
 
   it("refuses a body as the page does, and saves nothing", async () => {
@@ -140,16 +149,16 @@ describe("saving on the page and with the command", () => {
     });
   });
 
-  it("waits for an import that runs at the same time, also before the setting has a row", async () => {
+  it("waits for another writer at the same time, also before the setting has a row", async () => {
     const client = await testDb.pool.connect();
     try {
       await client.query("begin");
       await client.query("select pg_advisory_xact_lock(hashtext('logbook.integrations'))");
       const save = saveIntegration(db, "slack", { channelId: "C0123456789" }, amy, KEY);
       await new Promise((resolve) => setTimeout(resolve, 200));
-      // What a concurrent import writes while it holds the lock.
+      // What it writes while it holds the lock.
       await client.query("insert into app_setting (key, value) values ('slack', $1)", [
-        JSON.stringify({ botToken: { sealed: "v1.imported.value", hint: "…7f3a" }, channelId: null }),
+        JSON.stringify({ botToken: { sealed: "v1.other.value", hint: "…7f3a" }, channelId: null }),
       ]);
       await client.query("commit");
       expect((await save).view).toMatchObject({ botTokenSaved: true, botTokenHint: "…7f3a", channelId: "C0123456789" });
@@ -169,16 +178,71 @@ describe("saving on the page and with the command", () => {
   });
 
   it("says when a saved secret cannot be read with the current BETTER_AUTH_SECRET", async () => {
-    await saveIntegration(db, "webhook", { url: "https://hooks.example.org/logbook", secret: SIGNING }, amy, OTHER_KEY);
+    const again = "The saved value cannot be read with the current BETTER_AUTH_SECRET: enter it again.";
+    await saveIntegration(db, "webhook", { url: HOOK, secret: SIGNING }, amy, OTHER_KEY);
     const views = await integrationViews(db);
-    expect(views.webhook.state).toBe("incomplete");
-    expect(views.webhook.warnings).toEqual([
-      "The signing secret: The saved value cannot be read with the current BETTER_AUTH_SECRET: enter it again.",
-    ]);
-    await expect(saveIntegration(db, "webhook", { url: "https://hooks.example.org/other" }, amy, KEY)).rejects.toMatchObject({
-      fieldErrors: { secret: "The saved value cannot be read with the current BETTER_AUTH_SECRET: enter it again." },
-    });
-    expect((await saveIntegration(db, "webhook", { url: "https://hooks.example.org/other", secret: SIGNING }, amy, KEY)).view.state).toBe("set");
+    expect(views.webhook).toMatchObject({ state: "incomplete", urlSaved: true, urlHint: ORIGIN });
+    expect(views.webhook.warnings).toEqual([`The URL: ${again}`, `The signing secret: ${again}`]);
+    await expect(saveIntegration(db, "webhook", { url: HOOK }, amy, KEY)).rejects.toMatchObject({ fieldErrors: { secret: again } });
+    await expect(saveIntegration(db, "webhook", { secret: SIGNING }, amy, KEY)).rejects.toMatchObject({ fieldErrors: { url: again } });
+    expect((await saveIntegration(db, "webhook", { url: HOOK, secret: SIGNING }, amy, KEY)).view).toMatchObject({ state: "set", warnings: [] });
+  });
+});
+
+describe("the webhook's URL", () => {
+  const worker = () => createIntegrationsRuntime({ db: () => db, key: KEY, mode: "live", baseUrl: "https://logbook.example" });
+  const savedBy033 = async () => {
+    const value = { url: HOOK, secret: { sealed: seal(KEY, "webhook.secret", SIGNING), hint: "…2b8e" } };
+    await db.insert(appSetting).values({ key: "webhook", value, updatedById: amy.personId });
+  };
+
+  it("is sealed; the view, the audit event, and errors name only its server", async () => {
+    const { view } = await saveIntegration(db, "webhook", { url: HOOK, secret: SIGNING }, amy, KEY);
+    expect(view).toEqual({ state: "set", urlSaved: true, urlHint: ORIGIN, secretSaved: true, secretHint: "…2b8e", warnings: [] });
+    const [event] = await audits();
+    expect(event).toMatchObject({ action: "settings.webhook_changed", payload: { changed: ["url", "secret"] } });
+    const settings = (await worker().webhook())!;
+    expect(settings).toEqual({ url: HOOK, secret: SIGNING });
+    const failed = await createWebhookClient({ url: settings.url!, secret: SIGNING }).send({} as never).catch((e: Error) => e.message);
+    expect(failed).toContain(ORIGIN);
+    expectHidden(view, event, failed, await rows(), await integrationViews(db));
+  });
+
+  it("is kept when left out or empty, and null turns the webhook off", async () => {
+    await saveIntegration(db, "webhook", { url: HOOK, secret: SIGNING }, amy, KEY);
+    expect((await saveIntegration(db, "webhook", { secret: "another-signing-secret-1234" }, amy, KEY)).view).toMatchObject({ state: "set", urlHint: ORIGIN, secretHint: "…1234" });
+    expect((await saveIntegration(db, "webhook", { url: "" }, amy, KEY)).view).toMatchObject({ state: "set", urlHint: ORIGIN });
+    expect((await worker().webhook())?.url).toBe(HOOK);
+    expect((await saveIntegration(db, "webhook", { url: null }, amy, KEY)).view).toMatchObject({ state: "not set", urlSaved: false, urlHint: null, secretSaved: true });
+    expect(await worker().webhook()).toBeNull();
+  });
+
+  it("from 0.3.3, saved as plain text, works at once and is sealed once at the start of a process", async () => {
+    await savedBy033();
+    const runtime = worker();
+    expect(await runtime.webhook()).toEqual({ url: HOOK, secret: SIGNING });
+    const before = (await integrationViews(db)).webhook;
+    expect(before).toMatchObject({ state: "set", urlSaved: true, urlHint: ORIGIN, secretHint: "…2b8e" });
+    expectHidden(before);
+
+    expect((await Promise.all([sealWebhookUrl(db, KEY), sealWebhookUrl(db, KEY)])).sort()).toEqual([false, true]);
+    const sealed = await rows();
+    expectHidden(sealed, await audits());
+    expect(await sealWebhookUrl(db, KEY)).toBe(false);
+    expect(await rows()).toEqual(sealed);
+    // The same settings, also for a worker that read the plain URL before.
+    expect(await runtime.webhook()).toEqual({ url: HOOK, secret: SIGNING });
+    expect((await integrationViews(db)).webhook).toEqual(before);
+    const [row] = await db.select().from(appSetting).where(eq(appSetting.key, "webhook"));
+    expect(row!.updatedById).toBe(amy.personId);
+  });
+
+  it("is off for 0.3.3 after a rollback: that version takes the sealed URL for none", async () => {
+    await savedBy033();
+    await sealWebhookUrl(db, KEY);
+    // The schema of 0.3.3 (src/lib/integrations/store.ts at v0.3.3).
+    const schema = z.object({ url: z.string().nullable().catch(null), secret: z.object({ sealed: z.string(), hint: z.string().nullable() }).nullable().catch(null) });
+    expect(schema.parse((await rows()).webhook)).toMatchObject({ url: null, secret: { hint: "…2b8e" } });
   });
 });
 
@@ -212,6 +276,35 @@ describe("the test buttons", () => {
     expect(await testEmail(db, { to: "amy@example.org" }, KEY)).toEqual({ ok: false, message: "The test email could not be sent: MailerSend: HTTP 401" });
   });
 
+  it("show what the mail server answered to a test email, without the login, and only a code of what is no mail server", async () => {
+    vi.stubEnv("NOTIFICATION_TRANSPORT", "live");
+    let greeting = "220 mail.example.org ready";
+    const server = createServer((socket) => {
+      socket.on("error", () => undefined);
+      socket.write(`${greeting}\r\n`);
+      socket.on("data", (data) => {
+        const line = data.toString().trim();
+        if (line.startsWith("EHLO") && !greeting.includes("FTP")) socket.write("250-mail.example.org\r\n250 AUTH PLAIN\r\n");
+        else if (line.startsWith("AUTH")) socket.write(`535-5.7.8 Login refused for logbook\r\n535 5.7.8 ${line.split(" ")[2]} (${PASSWORD})\r\n`);
+        else socket.write("500 what?\r\n");
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const smtp = { host: "127.0.0.1", port: (server.address() as AddressInfo).port, security: "none", username: "logbook", password: PASSWORD };
+      await saveIntegration(db, "email", { provider: "smtp", fromAddress: "sender@example.org", smtp }, amy, KEY);
+      expect(await testEmail(db, { to: "amy@example.org" }, KEY)).toEqual({
+        ok: false,
+        message: 'The test email could not be sent: the mail server answered "535-5.7.8 Login refused for *** 535 5.7.8 *** (***)".',
+      });
+      for (greeting of ["SSH-2.0-OpenSSH_10", "220 FTP server ready"]) {
+        expect(await testEmail(db, { to: "amy@example.org" }, KEY)).toEqual({ ok: false, message: "The test email could not be sent (EPROTOCOL)." });
+      }
+    } finally {
+      server.close();
+    }
+  });
+
   it("only log in development, and say what is missing", async () => {
     expect(await testSlack(db, KEY)).toEqual({ ok: false, message: "Save a bot token first." });
     expect(await testEmail(db, { to: "amy@example.org" }, KEY)).toMatchObject({ ok: false, message: expect.stringContaining("Email is not set up") });
@@ -220,109 +313,10 @@ describe("the test buttons", () => {
   });
 });
 
-describe("variables that moved out of .env", () => {
-  const OLD = {
-    SLACK_BOT_TOKEN: TOKEN,
-    SLACK_CHANNEL_ID: "C0123456789",
-    SMTP_URL: `smtps://logbook:${PASSWORD}@mail.example.org`,
-    MAIL_FROM: "logbook@example.org",
-    MAIL_FROM_NAME: "Logbook (Acme)",
-    WEBHOOK_URL: "https://hooks.example.org/logbook",
-    WEBHOOK_SECRET: SIGNING,
-  };
-
-  it("are copied once, sealed, with an audit event per setting by the environment", async () => {
-    const result = await importMovedVariables(db, { env: OLD, key: KEY });
-    expect(result).toEqual({ copied: Object.keys(OLD), kept: [], refused: [], waiting: [] });
-    const views = await integrationViews(db, { key: KEY, leftovers: [], settingsFromEnvironment: false, workerWithoutKey: false });
-    expect(views.slack).toMatchObject({ state: "set", botTokenHint: "…7f3a", channelId: "C0123456789" });
-    expect(views.email).toMatchObject({
-      state: "set",
-      provider: "smtp",
-      fromName: "Logbook (Acme)",
-      smtp: { host: "mail.example.org", port: 465, security: "tls", username: "logbook", passwordHint: "…9c1d" },
-    });
-    expect(views.webhook).toMatchObject({ state: "set", url: "https://hooks.example.org/logbook", secretHint: "…2b8e" });
-    const stored = JSON.stringify(await rows());
-    for (const secret of [TOKEN, PASSWORD, SIGNING]) expect(stored).not.toContain(secret);
-    const events = await audits();
-    expect(events.map((event) => [event.action, event.actorId, event.payload.actor, event.payload.variables])).toEqual([
-      ["settings.slack_changed", null, "environment", ["SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID"]],
-      ["settings.email_changed", null, "environment", ["SMTP_URL", "MAIL_FROM", "MAIL_FROM_NAME"]],
-      ["settings.webhook_changed", null, "environment", ["WEBHOOK_URL", "WEBHOOK_SECRET"]],
-    ]);
-    expect(JSON.stringify(events)).not.toMatch(new RegExp(`${TOKEN}|${PASSWORD}|${SIGNING}`));
-  });
-
-  it("are never copied again, also after an admin cleared the field", async () => {
-    await importMovedVariables(db, { env: OLD, key: KEY });
-    await saveIntegration(db, "slack", { botToken: null }, amy, KEY);
-    expect(await importMovedVariables(db, { env: OLD, key: KEY })).toEqual({ copied: [], kept: [], refused: [], waiting: [] });
-    expect((await integrationViews(db)).slack.botTokenSaved).toBe(false);
-  });
-
-  it("do not overwrite what the database has, and a value the page refuses is left out", async () => {
-    await saveIntegration(db, "webhook", { url: "https://hooks.example.org/saved", secret: "a-saved-secret-0000" }, amy, KEY);
-    const result = await importMovedVariables(db, { env: { ...OLD, SLACK_CHANNEL_ID: "#logbook" }, key: KEY });
-    expect(result.kept).toEqual(["WEBHOOK_URL", "WEBHOOK_SECRET"]);
-    expect(result.refused).toEqual(["SLACK_CHANNEL_ID"]);
-    const views = await integrationViews(db);
-    expect(views.webhook).toMatchObject({ url: "https://hooks.example.org/saved", secretHint: "…0000" });
-    expect(views.slack).toMatchObject({ botTokenSaved: true, channelId: null });
-  });
-
-  it("are copied by one process when several start together, also when each sees only some", async () => {
-    const results = await Promise.all([
-      importMovedVariables(db, { env: OLD, key: KEY }),
-      importMovedVariables(db, { env: OLD, key: KEY }),
-      // An old Compose file may pass a variable to one service only.
-      importMovedVariables(db, { env: { MAIL_FROM: OLD.MAIL_FROM }, key: KEY }),
-    ]);
-    expect(results.flatMap((result) => result.copied).sort()).toEqual(Object.keys(OLD).sort());
-    expect((await audits()).length).toBeLessThanOrEqual(4);
-    expect((await audits()).filter((event) => event.action === "settings.slack_changed")).toHaveLength(1);
-  });
-
-  it("wait while the process has no BETTER_AUTH_SECRET", async () => {
-    expect(await importMovedVariables(db, { env: OLD, key: null })).toMatchObject({ copied: [], waiting: Object.keys(OLD) });
-    expect(await rows()).toEqual({});
-  });
-
-  it("are named also when the worker has no BETTER_AUTH_SECRET and no old variables", async () => {
-    await db.insert(workerHeartbeat).values({
-      workerId: "w1",
-      startedAt: new Date(),
-      beatAt: new Date(),
-      channels: { slack: "off", email: "off", movedVariables: [], settingsFromEnvironment: false, withoutKey: true },
-    });
-    const views = await integrationViews(db, await viewContext(db, { SLACK_BOT_TOKEN: TOKEN }));
-    expect(views.slack.warnings).toEqual([
-      expect.stringMatching(/so it cannot read the secrets saved here/),
-      "SLACK_BOT_TOKEN is still set in the environment. Logbook no longer reads it: this page holds the setting. Delete it from .env.",
-    ]);
-  });
-
-  it("are named on the page while they are still set, for this process or the worker", async () => {
-    await db.insert(workerHeartbeat).values({
-      workerId: "w1",
-      startedAt: new Date(),
-      beatAt: new Date(),
-      channels: { slack: "off", email: "off", movedVariables: ["WEBHOOK_SECRET", "MAIL_FROM"] },
-    });
-    const views = await integrationViews(db, await viewContext(db, { SLACK_BOT_TOKEN: TOKEN }));
-    expect(views.slack.warnings).toEqual([
-      "SLACK_BOT_TOKEN is still set in the environment. Logbook no longer reads it: this page holds the setting. Delete it from .env.",
-    ]);
-    expect(views.email.warnings).toEqual([expect.stringMatching(/^MAIL_FROM is still set/)]);
-    expect(views.webhook.warnings).toEqual([expect.stringMatching(/^WEBHOOK_SECRET is still set/)]);
-    expect(JSON.stringify(views)).not.toContain(TOKEN);
-  });
-});
-
 describe("the worker", () => {
   it("picks up a change without a restart", async () => {
     vi.stubEnv("NOTIFICATION_TRANSPORT", "live");
-    const runtime = createIntegrationsRuntime({ db: () => db, key: KEY, mode: "live", baseUrl: "https://logbook.example", env: {} });
+    const runtime = createIntegrationsRuntime({ db: () => db, key: KEY, mode: "live", baseUrl: "https://logbook.example" });
     expect((await runtime.transports()).slack).toBeUndefined();
     expect(await runtime.webhook()).toBeNull();
     await saveIntegration(db, "slack", { botToken: TOKEN, channelId: "C0123456789" }, amy, KEY);
@@ -334,46 +328,21 @@ describe("the worker", () => {
       slackChannel: "live",
       email: "off",
       webhook: "live",
-      movedVariables: [],
-      settingsFromEnvironment: false,
       withoutKey: false,
     });
   });
 
-  it("says when it has no BETTER_AUTH_SECRET, also without old variables to fall back on", async () => {
-    const runtime = createIntegrationsRuntime({ db: () => db, key: null, mode: "live", baseUrl: "https://logbook.example", env: {} });
+  it("says when it has no BETTER_AUTH_SECRET (an older compose.yaml), and then reads no secret", async () => {
+    const runtime = createIntegrationsRuntime({ db: () => db, key: null, mode: "live", baseUrl: "https://logbook.example" });
     await saveIntegration(db, "slack", { botToken: TOKEN }, amy, KEY);
+    await saveIntegration(db, "webhook", { url: HOOK, secret: SIGNING }, amy, KEY);
     // On, but unreadable: messages are tried again, not skipped.
     expect((await runtime.transports()).slack!.mode).toBe("unreadable");
-    expect(runtime.channels()).toMatchObject({ slack: "off", settingsFromEnvironment: false, withoutKey: true });
+    expect(await runtime.webhook()).toBeNull();
+    expect(runtime.channels()).toMatchObject({ slack: "off", webhook: "off", withoutKey: true });
     await db.insert(workerHeartbeat).values({ workerId: "w1", startedAt: new Date(), beatAt: new Date(), channels: runtime.channels() });
     expect((await integrationViews(db)).slack.warnings).toEqual([
-      'The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it cannot read the secrets saved here. Give it the compose.yaml of this release (docs/deployment.md, "Moved from .env").',
+      'The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it cannot read the secrets saved here. Give it the compose.yaml of this release (docs/deployment.md, "Operations").',
     ]);
-  });
-
-  it("sends with the old variables while it has no BETTER_AUTH_SECRET (an older compose.yaml), and says so", async () => {
-    await saveIntegration(db, "slack", { botToken: "xoxb-saved-on-the-page-1" }, amy, KEY);
-    const env = { SLACK_BOT_TOKEN: TOKEN, WEBHOOK_URL: "https://hooks.example.org/logbook", WEBHOOK_SECRET: SIGNING };
-    const runtime = createIntegrationsRuntime({ db: () => db, key: null, mode: "live", baseUrl: "https://logbook.example", env });
-    const calls = fakeFetch({});
-    await (await runtime.transports()).slack!.postMessage("U1", "x");
-    expect(calls[0]!.authorization).toBe(`Bearer ${TOKEN}`);
-    expect(await runtime.webhook()).toEqual({ url: "https://hooks.example.org/logbook", secret: SIGNING });
-    expect(runtime.channels()).toMatchObject({ movedVariables: ["SLACK_BOT_TOKEN", "WEBHOOK_URL", "WEBHOOK_SECRET"], settingsFromEnvironment: true });
-
-    await db.insert(workerHeartbeat).values({ workerId: "w1", startedAt: new Date(), beatAt: new Date(), channels: runtime.channels() });
-    expect((await integrationViews(db)).slack.warnings[0]).toBe('The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it still sends with SLACK_BOT_TOKEN from .env and ignores this page. Give it the compose.yaml of this release (docs/deployment.md, "Moved from .env").');
-  });
-
-  it("with the key, copies the old variables and then reads only the database", async () => {
-    const env = { SLACK_BOT_TOKEN: TOKEN };
-    await importMovedVariables(db, { env, key: KEY });
-    const runtime = createIntegrationsRuntime({ db: () => db, key: KEY, mode: "live", baseUrl: "https://logbook.example", env });
-    await saveIntegration(db, "slack", { botToken: "xoxb-changed-on-the-page-1" }, amy, KEY);
-    const calls = fakeFetch({});
-    await (await runtime.transports()).slack!.postMessage("U1", "x");
-    expect(calls[0]!.authorization).toBe("Bearer xoxb-changed-on-the-page-1");
-    expect(runtime.channels()).toMatchObject({ movedVariables: ["SLACK_BOT_TOKEN"], settingsFromEnvironment: false });
   });
 });

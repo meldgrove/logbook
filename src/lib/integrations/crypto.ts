@@ -2,8 +2,8 @@ import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:cr
 
 /*
  * Seals the secrets of the integrations (Slack's bot token, the SMTP
- * password, MailerSend's API token, the webhook's signing secret) for the
- * database, with AES-256-GCM. The key is derived from BETTER_AUTH_SECRET with
+ * password, MailerSend's API token, the webhook's URL and signing secret) for
+ * the database, with AES-256-GCM. The key is derived from BETTER_AUTH_SECRET with
  * HKDF, so Logbook needs no new variable: the backups already name
  * BETTER_AUTH_SECRET as the setting a restore needs, and without it the
  * secrets must be entered again. Each sealed value names its field as
@@ -68,4 +68,9 @@ export function open(key: SealingKey, field: string, sealed: string): string {
  */
 export function secretHint(value: string): string | null {
   return value.length >= 12 ? `…${value.slice(-4)}` : null;
+}
+
+/** What they show of a URL, which can carry a token: its server, e.g. "https://hooks.example.org". */
+export function urlHint(value: string): string | null {
+  return URL.parse(value)?.origin ?? null;
 }

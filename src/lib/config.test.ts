@@ -4,7 +4,6 @@ import {
   parseAuthConfig,
   parseDirectoryConfig,
   parseErrorReportingConfig,
-  movedVariables,
   parseNotificationConfig,
   parseSealingConfig,
   parseUpdaterConfig,
@@ -150,19 +149,6 @@ describe("parseNotificationConfig", () => {
     expect(parseNotificationConfig({ ...base, NODE_ENV: "development" }).NOTIFICATION_TRANSPORT).toBe("console");
     expect(parseNotificationConfig({ ...base, NODE_ENV: "production", NOTIFICATION_TRANSPORT: "console" }).NOTIFICATION_TRANSPORT).toBe("console");
   });
-
-  it("does not read Slack, email, or the webhook: they moved to Admin › Integrations", () => {
-    const config = parseNotificationConfig({ ...base, SLACK_BOT_TOKEN: "xoxp-not-checked", SMTP_URL: "not-a-url", MAIL_FROM: "x" });
-    expect(config).toEqual({ NOTIFICATION_TRANSPORT: "console", LOGBOOK_BASE_URL: "https://logbook.example.org" });
-  });
-});
-
-describe("movedVariables", () => {
-  it("returns the old variables that are set, trimmed, and treats blank as unset", () => {
-    expect(
-      movedVariables({ SLACK_BOT_TOKEN: " xoxb-1 ", SMTP_URL: " ", MAIL_FROM: "", WEBHOOK_SECRET: "s".repeat(16), OIDC_CLIENT_ID: "x" }),
-    ).toEqual({ SLACK_BOT_TOKEN: "xoxb-1", WEBHOOK_SECRET: "s".repeat(16) });
-  });
 });
 
 describe("parseSealingConfig", () => {
@@ -174,27 +160,10 @@ describe("parseSealingConfig", () => {
 });
 
 describe("validateWorkerConfig", () => {
-  it("needs the base URL for links in messages", () => {
+  it("needs the base URL for links in messages, but no BETTER_AUTH_SECRET: an earlier compose.yaml does not pass it", () => {
     expect(() => validateWorkerConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbook", ...manualDirectory })).toThrow(/LOGBOOK_BASE_URL/);
     expect(() =>
       validateWorkerConfig({ DATABASE_URL: "postgres://u:p@db:5432/logbook", LOGBOOK_BASE_URL: "https://logbook.example.org", ...manualDirectory }),
-    ).not.toThrow();
-  });
-
-  it("starts with the variables an earlier compose.yaml passes: no BETTER_AUTH_SECRET, old values that are not checked", () => {
-    expect(() =>
-      validateWorkerConfig({
-        DATABASE_URL: "postgres://u:p@db:5432/logbook",
-        LOGBOOK_BASE_URL: "https://logbook.example.org",
-        ...manualDirectory,
-        SLACK_BOT_TOKEN: "xoxb-1",
-        SLACK_CHANNEL_ID: "#not-an-id",
-        SMTP_URL: "smtp://mail.example.org",
-        MAIL_FROM: "logbook@example.org",
-        MAIL_FROM_NAME: "",
-        WEBHOOK_URL: "https://hooks.example.org/logbook",
-        WEBHOOK_SECRET: "short",
-      }),
     ).not.toThrow();
   });
 });

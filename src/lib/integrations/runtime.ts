@@ -1,11 +1,9 @@
-import { movedVariables, MOVED_VARIABLES } from "@/lib/config";
 import type { Database } from "@/lib/db/client";
 import { logger } from "@/lib/logger";
 import { channelModes, createTransports, type Transports } from "@/lib/notifications/transports";
 import type { NotificationChannels } from "@/lib/notifications/types";
 import type { SealingKey } from "./crypto";
-import { settingsFromEnvironment } from "./moved-variables";
-import { loadStored, openStored, type Integrations, type Unreadable, type WebhookSettings } from "./store";
+import { loadStored, openStored, type Unreadable, type WebhookSettings } from "./store";
 
 /*
  * The worker's view of Admin › Integrations. It reads the settings again
@@ -14,9 +12,8 @@ import { loadStored, openStored, type Integrations, type Unreadable, type Webhoo
  * rebuilt only when the stored settings changed.
  *
  * Without BETTER_AUTH_SECRET (a worker started with the compose.yaml of an
- * earlier version) the worker cannot open the stored secrets. If it sees the
- * old variables, it sends with them, as before, and reports that in its
- * heartbeat so the admin page can say so.
+ * earlier version) the worker cannot open the stored secrets. It reports that
+ * in its heartbeat so the admin page can say so.
  */
 
 export interface IntegrationsRuntime {
@@ -24,7 +21,7 @@ export interface IntegrationsRuntime {
   transports(): Promise<Transports>;
   /** The webhook's URL and secret, or null while it is off. */
   webhook(): Promise<WebhookSettings | null>;
-  /** What the heartbeat reports: the modes after the last read, and the environment. */
+  /** What the heartbeat reports: the modes after the last read, and whether the key is missing. */
   channels(): NotificationChannels;
 }
 
@@ -39,32 +36,16 @@ export function createIntegrationsRuntime(options: {
   key: SealingKey | null;
   mode: "live" | "console";
   baseUrl: string;
-  env?: Record<string, string | undefined>;
 }): IntegrationsRuntime {
-  const env = options.env ?? process.env;
-  const leftovers = MOVED_VARIABLES.filter((name) => movedVariables(env)[name] !== undefined);
-  const fromEnvironment = !options.key && leftovers.length > 0;
   let current: Current | undefined;
   const reported = new Set<Unreadable>();
 
-  function build(settings: Integrations, stamp: string, unreadable: readonly Unreadable[] = []): Current {
-    const webhook = settings.webhook.url && settings.webhook.secret ? settings.webhook : null;
-    return {
-      stamp,
-      transports: createTransports({ mode: options.mode, baseUrl: options.baseUrl, slack: settings.slack, email: settings.email, unreadable }),
-      webhook,
-    };
-  }
-
   async function load(): Promise<Current> {
-    if (fromEnvironment) {
-      current ??= build(settingsFromEnvironment(env).integrations, "environment");
-      return current;
-    }
     const { stored } = await loadStored(options.db());
     const stamp = JSON.stringify(stored);
     if (current?.stamp === stamp) return current;
     const { integrations, unreadable } = openStored(stored, options.key);
+    const { slack, email, webhook } = integrations;
     for (const field of unreadable) {
       if (reported.has(field)) continue;
       reported.add(field);
@@ -75,7 +56,11 @@ export function createIntegrationsRuntime(options: {
           : "the worker has no BETTER_AUTH_SECRET, so it cannot read the secrets of Admin › Integrations: give it the compose.yaml of this release",
       );
     }
-    current = build(integrations, stamp, unreadable);
+    current = {
+      stamp,
+      transports: createTransports({ mode: options.mode, baseUrl: options.baseUrl, slack, email, unreadable }),
+      webhook: webhook.url && webhook.secret ? webhook : null,
+    };
     return current;
   }
 
@@ -87,8 +72,6 @@ export function createIntegrationsRuntime(options: {
       return {
         ...modes,
         webhook: current?.webhook ? "live" : "off",
-        movedVariables: leftovers,
-        settingsFromEnvironment: fromEnvironment,
         withoutKey: !options.key,
       };
     },

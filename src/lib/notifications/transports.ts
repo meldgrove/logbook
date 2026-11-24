@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { DEFAULT_FROM_NAME, type SmtpSecurity } from "@/lib/integrations/schemas";
 import type { EmailSettings, SlackSettings, Unreadable } from "@/lib/integrations/store";
 import { logger } from "@/lib/logger";
+import { smtpReply } from "./smtp-reply";
 import type { ChannelMode, NotificationChannels } from "./types";
 
 /*
@@ -17,12 +18,15 @@ import type { ChannelMode, NotificationChannels } from "./types";
  */
 export class DeliveryError extends Error {
   readonly code?: string;
+  /** What the mail server answered, for the test button (`smtpReply`). */
+  readonly reply?: string;
   readonly retryAfterMs?: number;
   readonly permanent: boolean;
-  constructor(message: string, options: { code?: string; retryAfterMs?: number; permanent?: boolean } = {}) {
+  constructor(message: string, options: { code?: string; reply?: string; retryAfterMs?: number; permanent?: boolean } = {}) {
     super(message);
     this.name = "DeliveryError";
     this.code = options.code;
+    this.reply = options.reply;
     this.retryAfterMs = options.retryAfterMs;
     this.permanent = options.permanent ?? false;
   }
@@ -236,6 +240,7 @@ export function createSmtpTransport(
         const detail = smtp.responseCode ? `SMTP ${smtp.responseCode}` : (smtp.code ?? "SMTP");
         throw new DeliveryError(`${detail}: ${smtp.message}`.slice(0, 500), {
           code: smtp.code,
+          reply: smtpReply(smtp, options) ?? undefined,
           permanent: (smtp.responseCode ?? 0) >= 500 || smtp.code === "EAUTH",
         });
       }

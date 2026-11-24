@@ -39,10 +39,12 @@ export function createLogger(level: string, destination?: DestinationStream) {
         // The secrets of an Admin › Integrations body (src/lib/integrations/schemas.ts).
         "*.botToken",
         "*.mailersendToken",
+        "*.url",
         "*.*.password",
         "*.*.token",
         "*.*.secret",
         "*.*.botToken",
+        "*.*.url",
       ],
       censor: "[redacted]",
     },

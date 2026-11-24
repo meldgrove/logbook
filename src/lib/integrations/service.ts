@@ -2,12 +2,12 @@ import { desc, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { auditActor, type SettingsActor } from "@/lib/audit/actor";
 import { recordAudit } from "@/lib/audit";
-import { movedVariables, parseNotificationModeConfig, parseSealingConfig, type MovedVariable } from "@/lib/config";
+import { parseNotificationModeConfig, parseSealingConfig } from "@/lib/config";
 import type { Database } from "@/lib/db/client";
 import { workerHeartbeat } from "@/lib/db/schema";
 import { errorMessage } from "@/lib/logger";
-import { createTransports, emailReady, type Transports } from "@/lib/notifications/transports";
-import { deriveSealingKey, seal, secretHint, type SealingKey } from "./crypto";
+import { createTransports, DeliveryError, emailReady, type Transports } from "@/lib/notifications/transports";
+import { deriveSealingKey, seal, secretHint, urlHint, type SealingKey } from "./crypto";
 import {
   emailTestSchema,
   fieldErrorsOf,
@@ -59,18 +59,6 @@ export const CHECK_FIELDS = "Check the highlighted fields.";
 /** What a setting is called in messages. */
 export const INTEGRATION_LABELS: Record<IntegrationName, string> = { slack: "Slack", email: "email", webhook: "the webhook" };
 
-/** Which setting each moved variable belonged to. */
-export const MOVED_TO: Record<MovedVariable, IntegrationName> = {
-  SLACK_BOT_TOKEN: "slack",
-  SLACK_CHANNEL_ID: "slack",
-  SMTP_URL: "email",
-  MAILERSEND_API_TOKEN: "email",
-  MAIL_FROM: "email",
-  MAIL_FROM_NAME: "email",
-  WEBHOOK_URL: "webhook",
-  WEBHOOK_SECRET: "webhook",
-};
-
 const NO_KEY =
   "This process has no BETTER_AUTH_SECRET, so it cannot store or read secrets. Run it with the compose.yaml of this release, which passes BETTER_AUTH_SECRET to every service.";
 const UNREADABLE = "The saved value cannot be read with the current BETTER_AUTH_SECRET: enter it again.";
@@ -85,72 +73,30 @@ export function currentSealingKey(): SealingKey | null {
   return sealingKey.key;
 }
 
-/** What the worker reports about its environment (its heartbeat). */
-export interface WorkerEnvironment {
-  /** Moved variables still set for the worker. */
-  movedVariables: MovedVariable[];
-  /** The worker has no BETTER_AUTH_SECRET and sends with the moved variables. */
-  settingsFromEnvironment: boolean;
+/** Where the views look: this process's key, and the worker's report. */
+export interface ViewContext {
+  key: SealingKey | null;
   /** The worker has no BETTER_AUTH_SECRET, so it cannot read the secrets saved here. */
-  withoutKey: boolean;
+  workerWithoutKey: boolean;
 }
 
-/** The latest worker heartbeat's report, or nothing while no worker has reported. */
-export async function workerEnvironment(db: Database): Promise<WorkerEnvironment> {
+/** With the latest worker heartbeat's report, or nothing while no worker has reported. */
+export async function viewContext(db: Database): Promise<ViewContext> {
   const [row] = await db
     .select({ channels: workerHeartbeat.channels })
     .from(workerHeartbeat)
     .where(isNotNull(workerHeartbeat.beatAt))
     .orderBy(desc(workerHeartbeat.beatAt))
     .limit(1);
-  return {
-    movedVariables: (row?.channels?.movedVariables ?? []).filter((name): name is MovedVariable => name in MOVED_TO),
-    settingsFromEnvironment: row?.channels?.settingsFromEnvironment === true,
-    withoutKey: row?.channels?.withoutKey === true || row?.channels?.settingsFromEnvironment === true,
-  };
+  return { key: currentSealingKey(), workerWithoutKey: row?.channels?.withoutKey === true };
 }
 
-/** Where the views look: this process's key and environment, and the worker's report. */
-export interface ViewContext {
-  key: SealingKey | null;
-  /** Moved variables set for this process or the worker, in a fixed order. */
-  leftovers: MovedVariable[];
-  settingsFromEnvironment: boolean;
-  workerWithoutKey: boolean;
-}
-
-export async function viewContext(db: Database, env: Record<string, string | undefined> = process.env): Promise<ViewContext> {
-  const worker = await workerEnvironment(db);
-  const seen = new Set<string>([...Object.keys(movedVariables(env)), ...worker.movedVariables]);
-  return {
-    key: currentSealingKey(),
-    leftovers: (Object.keys(MOVED_TO) as MovedVariable[]).filter((name) => seen.has(name)),
-    settingsFromEnvironment: worker.settingsFromEnvironment,
-    workerWithoutKey: worker.withoutKey,
-  };
-}
-
-const list = (names: string[]) => (names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`);
-
-/** The page's warnings for a setting: old variables still set, a worker without the key, secrets that cannot be read. */
+/** The page's warnings for a setting: a worker without the key, secrets that cannot be read. */
 function warningsFor(name: IntegrationName, context: ViewContext, unreadable: Unreadable[]): string[] {
   const warnings: string[] = [];
-  const leftovers = context.leftovers.filter((variable) => MOVED_TO[variable] === name);
-  const one = leftovers.length === 1;
   if (context.workerWithoutKey) {
-    const reads = !context.settingsFromEnvironment
-      ? "cannot read the secrets saved here"
-      : leftovers.length > 0
-        ? `still sends with ${list(leftovers)} from .env and ignores this page`
-        : "ignores this page";
     warnings.push(
-      `The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it ${reads}. Give it the compose.yaml of this release (docs/deployment.md, "Moved from .env").`,
-    );
-  }
-  // The worker that reads them names them above; any other process names them here.
-  if (leftovers.length > 0 && !context.settingsFromEnvironment) {
-    warnings.push(
-      `${list(leftovers)} ${one ? "is" : "are"} still set in the environment. Logbook no longer reads ${one ? "it" : "them"}: this page holds the setting. Delete ${one ? "it" : "them"} from .env.`,
+      'The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it cannot read the secrets saved here. Give it the compose.yaml of this release (docs/deployment.md, "Operations").',
     );
   }
   for (const field of unreadable) {
@@ -163,10 +109,11 @@ const SECRET_LABELS: Record<Unreadable, string> = {
   "slack.botToken": "The bot token",
   "email.smtp.password": "The SMTP password",
   "email.mailersend.token": "The MailerSend API token",
+  "webhook.url": "The URL",
   "webhook.secret": "The signing secret",
 };
 
-const saved = (value: Sealed | null) => ({ saved: value !== null, hint: value?.hint ?? null });
+const saved = (value: Pick<Sealed, "hint"> | null) => ({ saved: value !== null, hint: value?.hint ?? null });
 
 function slackState(slack: StoredSlack, unreadable: Unreadable[]): IntegrationState {
   if (slack.botToken && !unreadable.includes(SECRET_FIELDS.slackBotToken)) return "set";
@@ -188,7 +135,7 @@ function emailState(email: StoredEmail, unreadable: Unreadable[]): IntegrationSt
 
 function webhookState(webhook: StoredWebhook, unreadable: Unreadable[]): IntegrationState {
   if (!webhook.url) return "not set";
-  return webhook.secret && !unreadable.includes(SECRET_FIELDS.webhookSecret) ? "set" : "incomplete";
+  return usable(webhook.url, SECRET_FIELDS.webhookUrl, unreadable) && usable(webhook.secret, SECRET_FIELDS.webhookSecret, unreadable) ? "set" : "incomplete";
 }
 
 /** What the page shows, and what `cli settings show` prints. */
@@ -199,6 +146,7 @@ export function viewsOf(stored: StoredIntegrations, context: ViewContext): Integ
   const botToken = saved(slack.botToken);
   const password = saved(email.smtp.password);
   const token = saved(email.mailersend.token);
+  const url = saved(typeof webhook.url === "string" ? { hint: urlHint(webhook.url) } : webhook.url);
   const secret = saved(webhook.secret);
   const slackView: SlackView = {
     state: slackState(slack, unreadable),
@@ -225,7 +173,8 @@ export function viewsOf(stored: StoredIntegrations, context: ViewContext): Integ
   };
   const webhookView: WebhookView = {
     state: webhookState(webhook, unreadable),
-    url: webhook.url,
+    urlSaved: url.saved,
+    urlHint: url.hint,
     secretSaved: secret.saved,
     secretHint: secret.hint,
     warnings: warningsFor("webhook", context, unreadable),
@@ -242,15 +191,22 @@ export async function integrationViews(db: Database, context?: ViewContext): Pro
  * A secret field after a save: undefined keeps the saved value, null removes
  * it, text is sealed. Sealing needs the key.
  */
-function nextSecret(current: Sealed | null, input: string | null | undefined, field: Unreadable, key: SealingKey | null, path: string): Sealed | null {
+function nextSecret<T>(
+  current: T,
+  input: string | null | undefined,
+  field: Unreadable,
+  key: SealingKey | null,
+  path: string,
+  hint: (value: string) => string | null = secretHint,
+): T | Sealed | null {
   if (input === undefined) return current;
   if (input === null) return null;
   if (!key) throw new IntegrationError(NO_KEY, { [path]: "Not saved: this process cannot seal secrets." });
-  return { sealed: seal(key, field, input), hint: secretHint(input) };
+  return { sealed: seal(key, field, input), hint: hint(input) };
 }
 
 /** Whether a saved secret is usable for the checks: present, and readable when the key is at hand. */
-function usable(value: Sealed | null, field: Unreadable, unreadable: Unreadable[]): boolean {
+function usable(value: Sealed | string | null, field: Unreadable, unreadable: Unreadable[]): boolean {
   return value !== null && !unreadable.includes(field);
 }
 
@@ -317,15 +273,18 @@ function nextEmail(current: StoredEmail, body: unknown, key: SealingKey | null):
 function nextWebhook(current: StoredWebhook, body: unknown, key: SealingKey | null): StoredWebhook {
   const input = INPUT_SCHEMAS.webhook.parse(body);
   const next: StoredWebhook = {
-    url: input.url,
+    url: nextSecret(current.url, input.url, SECRET_FIELDS.webhookUrl, key, "url", urlHint),
     secret: nextSecret(current.secret, input.secret, SECRET_FIELDS.webhookSecret, key, "secret"),
   };
   const unreadable = key ? openStored(emptyBut("webhook", next), key).unreadable : [];
-  if (next.url && !usable(next.secret, SECRET_FIELDS.webhookSecret, unreadable)) {
-    throw new IntegrationError(CHECK_FIELDS, {
-      secret: next.secret ? UNREADABLE : "Enter a signing secret of at least 16 characters.",
-    });
+  const errors: IntegrationFieldErrors = {};
+  if (next.url) {
+    if (!usable(next.url, SECRET_FIELDS.webhookUrl, unreadable)) errors.url = UNREADABLE;
+    if (!usable(next.secret, SECRET_FIELDS.webhookSecret, unreadable)) {
+      errors.secret = next.secret ? UNREADABLE : "Enter a signing secret of at least 16 characters.";
+    }
   }
+  if (Object.keys(errors).length > 0) throw new IntegrationError(CHECK_FIELDS, errors);
   return next;
 }
 
@@ -447,6 +406,10 @@ export async function testEmail(db: Database, input: unknown, key: SealingKey | 
     });
     return { ok: true, message: mode === "console" ? CONSOLE : `Sent a test email to ${parsed.data.to}.` };
   } catch (error) {
-    return { ok: false, message: `The test email could not be sent: ${errorMessage(error)}` };
+    const failed = "The test email could not be sent";
+    if (transports.email.kind !== "smtp") return { ok: false, message: `${failed}: ${errorMessage(error)}` };
+    // The mail server's own answer, or only a code: other errors can quote anything.
+    const { reply, code } = error instanceof DeliveryError ? error : {};
+    return { ok: false, message: reply ? `${failed}: the mail server answered "${reply}".` : `${failed}${code ? ` (${code})` : ""}.` };
   }
 }

@@ -51,7 +51,7 @@ test("a member of the Keycloak admin group sees the admin area", async ({ page }
   // The test worker only logs notifications.
   await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
   await expect(page.locator("dt", { hasText: /^Slack$/ }).locator("..")).toContainText("Log only (development)");
-  // Without WEBHOOK_URL, the worker sends nothing.
+  // Without a webhook, the worker sends nothing.
   await expect(page.getByRole("heading", { name: "Webhook" })).toBeVisible();
   await expect(page.locator("dt", { hasText: /^Webhook$/ }).locator("..")).toContainText("Off");
   // Without an update service (no `updater` answers here), the update button and the Updates card say so,

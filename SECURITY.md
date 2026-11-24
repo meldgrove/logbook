@@ -23,5 +23,5 @@ Security fixes go into the latest release and the `main` branch.
   `realm-management`.
 - Set `OIDC_TRUST_EMAIL=true` only if people cannot choose their own email
   address at your identity provider.
-- Use a long, random `WEBHOOK_SECRET`, and verify the signature on every
-  request your receiver gets (see [docs/webhooks.md](docs/webhooks.md)).
+- Use a long, random signing secret for the webhook, and verify the signature
+  on every request your receiver gets (see [docs/webhooks.md](docs/webhooks.md)).

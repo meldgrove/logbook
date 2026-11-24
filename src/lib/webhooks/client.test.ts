@@ -47,10 +47,17 @@ describe("the webhook client", () => {
     await expect(createWebhookClient({ url: "https://hooks.example.org/x", secret: SECRET, fetch: rejected.fetch }).send(payload)).rejects.toThrow(
       /^The webhook answered HTTP 401$/,
     );
-    const down = receiver(new Error("connect ECONNREFUSED"));
-    await expect(createWebhookClient({ url: "https://hooks.example.org/x", secret: SECRET, fetch: down.fetch }).send(payload)).rejects.toBeInstanceOf(
-      WebhookError,
+    const down = receiver(Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } }));
+    await expect(createWebhookClient({ url: "https://hooks.example.org/x", secret: SECRET, fetch: down.fetch }).send(payload)).rejects.toEqual(
+      new WebhookError("Request to https://hooks.example.org failed: ECONNREFUSED"),
     );
+  });
+
+  it("names only the server of a URL in its errors, also of one that fetch refuses and quotes", async () => {
+    const client = createWebhookClient({ url: "https://user:pass-1a2b@hooks.example.org/token-3c4d?key=5e6f", secret: SECRET });
+    const error = (await client.send(payload).catch((e: unknown) => e)) as Error;
+    expect(error).toEqual(new WebhookError("Request to https://hooks.example.org failed: TypeError"));
+    expect(error.cause).toBeUndefined();
   });
 
   it.each([200, 503])("cancels the unused HTTP %i body without waiting for cancellation", async (status) => {

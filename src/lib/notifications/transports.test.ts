@@ -252,11 +252,13 @@ describe("SMTP", () => {
   });
 
   it("reports a rejected email with the server's reply code", async () => {
-    const error = Object.assign(new Error("Mailbox unavailable"), { responseCode: 550, code: "EENVELOPE" });
+    const error = Object.assign(new Error("Mailbox unavailable"), { responseCode: 550, code: "EENVELOPE", response: "550 no mailbox for secret-pass" });
     const { createTransport } = fakeNodemailer(async () => Promise.reject(error));
-    const transport = createSmtpTransport(SMTP, createTransport);
+    const transport = createSmtpTransport({ ...SMTP, username: "user", password: "secret-pass" }, createTransport);
     await expect(transport.send(email)).rejects.toThrow(/SMTP 550: Mailbox unavailable/);
     await expect(transport.send(email)).rejects.toBeInstanceOf(DeliveryError);
+    // For the test button only, without the login.
+    await expect(transport.send(email)).rejects.toMatchObject({ reply: "550 no mailbox for ***" });
   });
 
   it("treats 5xx replies and failed logins as permanent, 4xx replies and connection errors as temporary", async () => {

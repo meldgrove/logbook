@@ -4,9 +4,8 @@ With a URL and a signing secret set under **Admin › Integrations** (or with
 `cli settings apply webhook`, see
 [deployment](deployment.md#settings-from-the-command-line)), the worker posts
 entries to that URL as JSON, for example to keep a search index, a knowledge
-base, or an AI assistant up to date. Earlier versions read them from
-`WEBHOOK_URL` and `WEBHOOK_SECRET`; Logbook copies those once
-([moved from `.env`](deployment.md#moved-from-env)).
+base, or an AI assistant up to date. The URL can carry a token, so Logbook
+stores it encrypted, like the signing secret, and shows only its server.
 
 ## What is sent
 

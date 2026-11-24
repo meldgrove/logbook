@@ -3,7 +3,7 @@ import path from "node:path";
 import { like } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectTestDatabase } from "../../tests/integration/db";
-import { appSetting, auditEvent, workerHeartbeat } from "@/lib/db/schema";
+import { appSetting, auditEvent } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
 import type { CliIo } from "./io";
 import { runCli } from "./main";
@@ -19,6 +19,8 @@ const { db } = testDb;
 
 const TOKEN = "xoxb-cli-secret-value-7f3a";
 const SIGNING = "cli-webhook-signing-secret-4c2d";
+const HOOK_TOKEN = "cli-webhook-url-token-9e8f";
+const HOOK = `https://hooks.example.org/${HOOK_TOKEN}?key=${HOOK_TOKEN}`;
 
 async function cli(args: string[], stdin: unknown = "") {
   const out: string[] = [];
@@ -47,6 +49,7 @@ afterEach(() => {
   const text = JSON.stringify(logged, (_key, value: unknown) => (value instanceof Error ? `${value.message} ${value.stack}` : value));
   expect(text).not.toContain(TOKEN);
   expect(text).not.toContain(SIGNING);
+  expect(text).not.toContain(HOOK_TOKEN);
   logged.length = 0;
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -84,14 +87,23 @@ describe("cli settings", () => {
     for (const result of [applied, shown, listed]) expect(result.out + result.err).not.toContain(TOKEN);
   });
 
-  it("takes back what show prints, keeping the saved secret", async () => {
-    await cli(["settings", "apply", "webhook"], { url: "https://hooks.example.org/logbook?key=abc", secret: SIGNING });
-    const shown = JSON.parse((await cli(["settings", "show", "webhook"])).out);
-    const again = await cli(["settings", "apply", "webhook"], { ...shown, url: "https://hooks.example.org/other" });
+  it("takes back what show prints, keeping the saved secrets, and shows only the server of the webhook's URL", async () => {
+    const applied = await cli(["settings", "apply", "webhook"], { url: HOOK, secret: SIGNING });
+    const shown = await cli(["settings", "show", "webhook"]);
+    const again = await cli(["settings", "apply", "webhook"], shown.out);
     expect(again.code, again.err).toBe(0);
-    expect(JSON.parse(again.out)).toMatchObject({ state: "set", url: "https://hooks.example.org/other", secretHint: "…4c2d" });
-    // list shows the receiver's origin only: a URL can carry a token.
-    expect((await cli(["settings", "list"])).out).toContain("webhook  set         url https://hooks.example.org/…, secret …4c2d");
+    for (const result of [applied, shown, again]) {
+      expect(JSON.parse(result.out)).toEqual({ state: "set", urlSaved: true, urlHint: "https://hooks.example.org", secretSaved: true, secretHint: "…4c2d", warnings: [] });
+    }
+    const listed = await cli(["settings", "list"]);
+    expect(listed.out).toContain("webhook  set         url https://hooks.example.org, secret …4c2d\n");
+    const listedJson = await cli(["settings", "list", "--json"]);
+    const refused = await cli(["settings", "apply", "webhook"], { url: HOOK, secret: "short" });
+    expect(refused.code).toBe(1);
+    const stored = await db.select().from(appSetting);
+    const audited = await db.select().from(auditEvent);
+    const outputs = [applied, shown, again, listed, listedJson, refused].map((result) => result.out + result.err);
+    expect(JSON.stringify([outputs, stored, audited])).not.toContain(HOOK_TOKEN);
   });
 
   it("refuses a body with the page's message and exit 1, and a body that is not JSON with exit 2", async () => {
@@ -134,26 +146,6 @@ describe("cli settings", () => {
     expect(requests).toEqual(["https://slack.com/api/auth.test", "https://api.mailersend.com/v1/email"]);
   });
 
-  it("names the old variables still set for this process or the worker, without their values", async () => {
-    vi.stubEnv("SLACK_BOT_TOKEN", TOKEN);
-    await db.insert(workerHeartbeat).values({
-      workerId: "w1",
-      startedAt: new Date(),
-      beatAt: new Date(),
-      channels: { slack: "off", email: "off", movedVariables: ["WEBHOOK_URL"] },
-    });
-    const listed = await cli(["settings", "list"]);
-    expect(listed.code).toBe(0);
-    expect(listed.err).toBe(
-      [
-        "SLACK_BOT_TOKEN is still set in the environment. Logbook no longer reads it: this page holds the setting. Delete it from .env.",
-        "WEBHOOK_URL is still set in the environment. Logbook no longer reads it: this page holds the setting. Delete it from .env.",
-        "",
-      ].join("\n"),
-    );
-    expect(listed.out + listed.err).not.toContain(TOKEN);
-  });
-
   it("cannot store a secret in a process without BETTER_AUTH_SECRET", async () => {
     vi.stubEnv("BETTER_AUTH_SECRET", "");
     const refused = await cli(["settings", "apply", "slack"], { botToken: TOKEN });
@@ -190,14 +182,15 @@ describe("cli as a process", () => {
   }
 
   it("reads the body from a pipe, prints only the result on stdout, logs to stderr, and exits", async () => {
-    const applied = await run(["settings", "apply", "webhook"], JSON.stringify({ url: "https://hooks.example.org/logbook", secret: SIGNING }));
+    const applied = await run(["settings", "apply", "webhook"], JSON.stringify({ url: HOOK, secret: SIGNING }));
     expect(applied.code, applied.err).toBe(0);
     expect(JSON.parse(applied.out)).toMatchObject({ state: "set", secretHint: "…4c2d" });
     expect(applied.err).toBe("Saved the webhook.\n");
     expect(applied.out + applied.err).not.toContain(SIGNING);
+    expect(applied.out + applied.err).not.toContain(HOOK_TOKEN);
 
     const failed = await run(["settings", "list"], "");
     expect(failed.code).toBe(0);
-    expect(failed.out).toMatch(/^webhook +set +url https:\/\/hooks\.example\.org\/…, secret …4c2d$/m);
+    expect(failed.out).toMatch(/^webhook +set +url https:\/\/hooks\.example\.org, secret …4c2d$/m);
   }, 30_000);
 });
