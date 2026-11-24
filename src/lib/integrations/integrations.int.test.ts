@@ -245,7 +245,7 @@ describe("variables that moved out of .env", () => {
     });
     const views = await integrationViews(db, await viewContext(db, { SLACK_BOT_TOKEN: TOKEN }));
     expect(views.slack.warnings).toEqual([
-      "SLACK_BOT_TOKEN is still set in the environment. Logbook copied it here once and no longer reads it: delete it from .env.",
+      "SLACK_BOT_TOKEN is still set in the environment. Logbook no longer reads it: this page holds the setting. Delete it from .env.",
     ]);
     expect(views.email.warnings).toEqual([expect.stringMatching(/^MAIL_FROM is still set/)]);
     expect(views.webhook.warnings).toEqual([expect.stringMatching(/^WEBHOOK_SECRET is still set/)]);
@@ -284,7 +284,7 @@ describe("the worker", () => {
     expect(runtime.channels()).toMatchObject({ movedVariables: ["SLACK_BOT_TOKEN", "WEBHOOK_URL", "WEBHOOK_SECRET"], settingsFromEnvironment: true });
 
     await db.insert(workerHeartbeat).values({ workerId: "w1", startedAt: new Date(), beatAt: new Date(), channels: runtime.channels() });
-    expect((await integrationViews(db)).slack.warnings[0]).toMatch(/^The worker has no BETTER_AUTH_SECRET, so it still sends with the variables in \.env/);
+    expect((await integrationViews(db)).slack.warnings[0]).toBe('The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it still sends with SLACK_BOT_TOKEN from .env and ignores this page. Give it the compose.yaml of this release (docs/deployment.md, "Moved from .env").');
   });
 
   it("with the key, copies the old variables and then reads only the database", async () => {

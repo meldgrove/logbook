@@ -146,8 +146,8 @@ describe("cli settings", () => {
     expect(listed.code).toBe(0);
     expect(listed.err).toBe(
       [
-        "SLACK_BOT_TOKEN is still set in the environment. Logbook copied it here once and no longer reads it: delete it from .env.",
-        "WEBHOOK_URL is still set in the environment. Logbook copied it here once and no longer reads it: delete it from .env.",
+        "SLACK_BOT_TOKEN is still set in the environment. Logbook no longer reads it: this page holds the setting. Delete it from .env.",
+        "WEBHOOK_URL is still set in the environment. Logbook no longer reads it: this page holds the setting. Delete it from .env.",
         "",
       ].join("\n"),
     );

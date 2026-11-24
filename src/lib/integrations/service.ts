@@ -128,16 +128,16 @@ const list = (names: string[]) => (names.length === 1 ? names[0]! : `${names.sli
 /** The page's warnings for a setting: old variables still set, a worker without the key, secrets that cannot be read. */
 function warningsFor(name: IntegrationName, context: ViewContext, unreadable: Unreadable[]): string[] {
   const warnings: string[] = [];
-  if (context.settingsFromEnvironment) {
-    warnings.push(
-      "The worker has no BETTER_AUTH_SECRET, so it still sends with the variables in .env and ignores this page. Give it the compose.yaml of this release (docs/deployment.md, Upgrades).",
-    );
-  }
   const leftovers = context.leftovers.filter((variable) => MOVED_TO[variable] === name);
-  if (leftovers.length > 0) {
-    const one = leftovers.length === 1;
+  const one = leftovers.length === 1;
+  if (context.settingsFromEnvironment) {
+    const reads = leftovers.length > 0 ? `still sends with ${list(leftovers)} from .env and ignores this page` : "ignores this page";
     warnings.push(
-      `${list(leftovers)} ${one ? "is" : "are"} still set in the environment. Logbook copied ${one ? "it" : "them"} here once and no longer reads ${one ? "it" : "them"}: delete ${one ? "it" : "them"} from .env.`,
+      `The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it ${reads}. Give it the compose.yaml of this release (docs/deployment.md, "Moved from .env").`,
+    );
+  } else if (leftovers.length > 0) {
+    warnings.push(
+      `${list(leftovers)} ${one ? "is" : "are"} still set in the environment. Logbook no longer reads ${one ? "it" : "them"}: this page holds the setting. Delete ${one ? "it" : "them"} from .env.`,
     );
   }
   for (const field of unreadable) {
