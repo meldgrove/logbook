@@ -49,9 +49,10 @@ interface Smtp {
 
 /**
  * An old SMTP_URL as the page's fields, read as nodemailer read it: smtps://
- * (or `secure=true`) is TLS (465); smtp:// (587) is STARTTLS when the server
- * offers it (`auto`), required with `requireTLS`, which wins over
- * `ignoreTLS`, never with `ignoreTLS` alone.
+ * is TLS (465); smtp:// (587) is STARTTLS when the server offers it (`auto`),
+ * required with `requireTLS`, which wins over `ignoreTLS`, never with
+ * `ignoreTLS` alone. The scheme decides TLS: a `secure` query never
+ * overrode it.
  */
 export function smtpFromUrl(value: string): Smtp | undefined {
   let url: URL;
@@ -68,7 +69,7 @@ export function smtpFromUrl(value: string): Smtp | undefined {
     if (value === "true" || value === "false") return value === "true";
     return Number.isNaN(Number(value)) ? value !== "" : Number(value) !== 0;
   };
-  const tls = flag("secure") ?? url.protocol === "smtps:";
+  const tls = url.protocol === "smtps:";
   const decode = (part: string) => {
     try {
       return decodeURIComponent(part);
