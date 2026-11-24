@@ -209,8 +209,7 @@ In a running container, such as a terminal on Coolify, the command is just
 - Settings: `slack`, `email`, and `webhook`.
 - Secrets go only in the body on stdin, never in an argument (arguments show
   in `ps` and the shell history). Nothing prints a saved secret. A body
-  pasted into a terminal is not shown: paste it, then press Enter and
-  Ctrl-D.
+  pasted into a terminal is not shown: paste it, then press Ctrl-D.
 - `apply` replaces the whole setting, as the page does: start from what
   `show` prints, which `apply` takes back. As on the page, a missing or
   empty secret keeps the saved one; `null` removes it. An `email` body

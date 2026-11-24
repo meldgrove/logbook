@@ -44,7 +44,7 @@ The operator command sets what **Admin › Integrations** sets, without a
 browser ([commands and bodies](deployment.md#settings-from-the-command-line)).
 In the resource, open Terminal, choose the `web` container, and run
 `cli settings list`. `cli settings apply slack` (or `email`, `webhook`)
-waits for the JSON body: paste it, press Enter, then Ctrl-D. The terminal
+waits for the JSON body: paste it, then press Ctrl-D. The terminal
 does not show what is pasted, so the secret stays off the screen. Then run
 `cli settings test slack` or `cli settings test email --to <address>`.
 
