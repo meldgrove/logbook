@@ -16,9 +16,9 @@ import {
   QUEUES,
   REMINDERS_CRON,
 } from "@/lib/jobs/queues";
-import { importMovedVariables, logMovedVariables } from "@/lib/integrations/moved-variables";
 import { createIntegrationsRuntime } from "@/lib/integrations/runtime";
 import { currentSealingKey } from "@/lib/integrations/service";
+import { sealWebhookUrl } from "@/lib/integrations/start";
 import { logger } from "@/lib/logger";
 import { retrySlackLookups, startDispatcher } from "@/lib/notifications/dispatch";
 import { notifyLostAccess, recordReminders } from "@/lib/notifications/notify";
@@ -47,10 +47,9 @@ async function main() {
   handleBossErrors(boss, outage, (error) => Sentry.captureException(error));
   await boss.start();
 
-  // Slack, email, and the webhook come from Admin › Integrations. Variables
-  // of earlier versions are copied there once; see moved-variables.ts.
+  // Slack, email, and the webhook come from Admin › Integrations.
   const key = currentSealingKey();
-  logMovedVariables(await importMovedVariables(getDb(), { key }));
+  if (key) await sealWebhookUrl(getDb(), key);
   const notificationConfig = getNotificationConfig();
   const integrations = createIntegrationsRuntime({
     db: getDb,

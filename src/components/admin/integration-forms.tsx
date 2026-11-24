@@ -349,17 +349,17 @@ export function EmailForm({ initial, adminEmail }: { initial: EmailView; adminEm
 
 export function WebhookForm({ initial }: { initial: WebhookView }) {
   const [view, setView] = useState(initial);
-  const [url, setUrl] = useState(initial.url ?? "");
+  const [url, setUrl] = useState<SecretValue>(initialSecret(initial.urlSaved));
   const [secret, setSecret] = useState<SecretValue>(initialSecret(initial.secretSaved));
   const { pending, errors, outcome, save } = useSave<WebhookView>("webhook", (saved) => {
     setView(saved);
-    setUrl(saved.url ?? "");
+    setUrl(initialSecret(saved.urlSaved));
     setSecret(initialSecret(saved.secretSaved));
   });
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
-    save({ url: url.trim() || null, secret: secretPayload(secret) });
+    save({ url: secretPayload(url), secret: secretPayload(secret) });
   }
 
   return (
@@ -367,14 +367,16 @@ export function WebhookForm({ initial }: { initial: WebhookView }) {
       <Warnings warnings={view.warnings} />
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <FieldGroup className="grid gap-4 sm:grid-cols-2">
-          <TextField
+          <SecretField
             id="webhook-url"
             label="URL"
-            type="url"
+            stored={view.urlSaved}
+            hint={view.urlHint}
             value={url}
             onChange={setUrl}
+            removable
             placeholder="https://hooks.example.org/logbook"
-            description="Empty turns the webhook off."
+            description="Without a URL, the webhook is off."
             error={errors.url}
           />
           <SecretField

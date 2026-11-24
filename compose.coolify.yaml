@@ -99,20 +99,6 @@ services:
         condition: service_completed_successfully
     environment:
       <<: [*app-environment, *directory-environment, *error-reporting-environment]
-      # Slack, email, and the webhook are set under Admin › Integrations, or
-      # with `cli settings` (docs/deployment.md). Earlier versions read these
-      # eight from .env: the worker copies them there once and ignores them
-      # afterwards. They stay here for servers that start this file before the
-      # copy. Admin › Integrations and `cli settings list` name the ones still
-      # set in .env: delete them there.
-      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
-      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID:-}
-      SMTP_URL: ${SMTP_URL:-}
-      MAILERSEND_API_TOKEN: ${MAILERSEND_API_TOKEN:-}
-      MAIL_FROM: ${MAIL_FROM:-}
-      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-}
-      WEBHOOK_URL: ${WEBHOOK_URL:-}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
     healthcheck:
       # The worker refreshes its heartbeat file every 30 seconds.
       test: ["CMD", "node", "dist/worker-healthcheck.mjs"]

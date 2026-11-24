@@ -39,7 +39,7 @@ function parse(args: string[], options: ParseArgsOptionsConfig, usage: string): 
 
 const ID = { id: { type: "string" } } as const;
 
-/** What `list` shows of a setting: its state and hints, never a secret or a full URL. */
+/** What `list` shows of a setting: its state and hints, never a secret. */
 function status(name: IntegrationName, views: IntegrationViews): { state: string; hints: string[] } {
   const hints: string[] = [];
   if (name === "slack") {
@@ -61,8 +61,7 @@ function status(name: IntegrationName, views: IntegrationViews): { state: string
     return { state: email.state, hints };
   }
   const webhook = views.webhook;
-  // The origin only: a receiver may carry a token in its path or query.
-  if (webhook.url) hints.push(`url ${new URL(webhook.url).origin}/…`);
+  if (webhook.urlSaved) hints.push(`url ${webhook.urlHint ?? "saved"}`);
   if (webhook.secretSaved) hints.push(`secret ${webhook.secretHint ?? "saved"}`);
   return { state: webhook.state, hints };
 }
@@ -96,7 +95,7 @@ export async function settingsCommand(args: string[], io: CliIo, database: () =>
     }
     const width = Math.max(...rows.map((row) => row.name.length));
     for (const row of rows) io.out(`${`${row.name.padEnd(width)}  ${row.state.padEnd(10)}  ${row.hints.join(", ")}`.trimEnd()}\n`);
-    // Old variables still set, a worker without the key, secrets that cannot be read.
+    // A worker without the key, secrets that cannot be read.
     for (const warning of new Set(rows.flatMap((row) => row.warnings))) io.err(`${warning}\n`);
     return 0;
   }

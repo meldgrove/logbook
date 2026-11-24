@@ -10,8 +10,6 @@ import { z } from "zod";
  *
  * Slack, email, and the webhook are not configured here: admins set them
  * under Admin › Integrations or with `cli settings` (src/lib/integrations).
- * Their old variables are read only by `movedVariables()`, for the one-time
- * import.
  */
 
 type Env = Record<string, string | undefined>;
@@ -150,33 +148,6 @@ const notificationSchema = notificationModeSchema.extend({
 const sealingSchema = z.object({
   BETTER_AUTH_SECRET: optional(z.string().min(32, "must be at least 32 characters")),
 });
-
-/**
- * Variables that versions before the Integrations page read for Slack, email,
- * and the webhook. Each process copies them into the database once
- * (src/lib/integrations/moved-variables.ts); afterwards they are ignored.
- */
-export const MOVED_VARIABLES = [
-  "SLACK_BOT_TOKEN",
-  "SLACK_CHANNEL_ID",
-  "SMTP_URL",
-  "MAILERSEND_API_TOKEN",
-  "MAIL_FROM",
-  "MAIL_FROM_NAME",
-  "WEBHOOK_URL",
-  "WEBHOOK_SECRET",
-] as const;
-export type MovedVariable = (typeof MOVED_VARIABLES)[number];
-
-/** The moved variables that are set, with their values trimmed. Blank values count as unset. */
-export function movedVariables(env: Env = process.env): Partial<Record<MovedVariable, string>> {
-  const values: Partial<Record<MovedVariable, string>> = {};
-  for (const name of MOVED_VARIABLES) {
-    const value = env[name]?.trim();
-    if (value) values[name] = value;
-  }
-  return values;
-}
 
 /** The release version, e.g. "0.2.0". Release images set it; images built from source have none. */
 const versionSchema = z.object({

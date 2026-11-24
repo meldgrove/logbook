@@ -3,7 +3,7 @@ import type { WebhookPayload } from "./payload";
 
 /*
  * Posts payloads to the webhook URL. Each request is signed with HMAC-SHA256
- * over "<timestamp>.<body>" with WEBHOOK_SECRET, so the receiver can check
+ * over "<timestamp>.<body>" with the signing secret, so the receiver can check
  * that it comes from Logbook and is recent:
  *
  *   Logbook-Timestamp: <Unix time in seconds>
@@ -14,8 +14,8 @@ import type { WebhookPayload } from "./payload";
  */
 
 export class WebhookError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
+  constructor(message: string) {
+    super(message);
     this.name = "WebhookError";
   }
 }
@@ -65,7 +65,9 @@ export function createWebhookClient(options: {
           signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (error) {
-        throw new WebhookError(`Request to ${new URL(options.url).origin} failed: ${(error as Error).message}`, { cause: error });
+        // Only the error's code or name: its message can quote the whole URL, such as one with a user name.
+        const { name, cause } = error as Error & { cause?: { code?: string } };
+        throw new WebhookError(`Request to ${new URL(options.url).origin} failed: ${cause?.code ?? name}`);
       }
       // The status determines delivery. Discard the body so receiver content
       // is neither buffered in memory nor copied into delivery diagnostics.

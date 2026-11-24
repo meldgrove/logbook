@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { auditActor, environmentImport, isOperator, operator } from "@/lib/audit/actor";
+import { auditActor, isOperator, operator } from "@/lib/audit/actor";
 
 const SRC = path.resolve(import.meta.dirname, "..");
 
@@ -21,10 +21,6 @@ describe("the operator", () => {
     expect(files.every((file) => file.startsWith(`cli${path.sep}`)), files.join()).toBe(true);
   });
 
-  it("and the import from the environment only by its module", () => {
-    expect(callers("environmentImport")).toEqual([path.join("lib", "integrations", "moved-variables.ts")]);
-  });
-
   it("does not survive JSON, so no request can stand for it", () => {
     expect(isOperator(operator("cli settings apply slack"))).toBe(true);
     expect(isOperator(JSON.parse(JSON.stringify(operator("cli settings apply slack"))))).toBe(false);
@@ -35,10 +31,6 @@ describe("the operator", () => {
     expect(auditActor(operator("cli settings apply slack"))).toEqual({
       actorId: null,
       payload: { actor: "operator", command: "cli settings apply slack" },
-    });
-    expect(auditActor(environmentImport(["SLACK_BOT_TOKEN"]))).toEqual({
-      actorId: null,
-      payload: { actor: "environment", variables: ["SLACK_BOT_TOKEN"] },
     });
     expect(auditActor({ personId: "p1" })).toEqual({ actorId: "p1", payload: {} });
   });

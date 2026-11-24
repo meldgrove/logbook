@@ -60,8 +60,7 @@ image path will not discover it.
    On Coolify, point the resource to `meldgrove/logbook`, branch `stable`,
    Docker Compose location `/compose.coolify.yaml` ([Coolify](coolify.md)).
 3. Deploy the new version. The session cookie has a new name, so people will
-   sign in again. If you pinned `MAIL_FROM_NAME` to the old name, set it to
-   `Logbook` or remove the override to use the new default.
+   sign in again.
 
 Existing release images remain at `ghcr.io/meldgrove/logbuch`. To continue
 using one, use the Compose files from its tag.
@@ -179,10 +178,13 @@ admin page shows the worker's last heartbeat.
 - **Upgrades**: read the release notes of every release since yours and
   take their steps. Back up the database first: migrations only move
   forward. `migrate` applies new migrations before `web` and `worker` start.
-  In `/srv/logbook`, run `git pull` (the newest release's `compose.yaml`),
-  then install the release with the [update button](#the-update-button), or
-  set `LOGBOOK_VERSION` in `.env` and run
-  `docker compose up -d --pull always`.
+  A server that still has the values of Slack, email, and the webhook only in
+  `.env` first runs 0.3.3 once, with its own Compose file: it copies them into
+  the database, and the lines can go from `.env`. In `/srv/logbook`, run
+  `git pull` (the newest release's `compose.yaml`), then install the release
+  with the [update button](#the-update-button), or set `LOGBOOK_VERSION` in
+  `.env` and run `docker compose up -d --pull always`. After going back to
+  0.3.3, an admin enters the webhook's URL again.
 
 ## Settings from the command line
 
@@ -214,8 +216,8 @@ In a running container, such as a terminal on Coolify, the command is just
   pasted into a terminal is not shown: paste it, then press Ctrl-D.
 - `apply` replaces the whole setting, as the page does: start from what
   `show` prints, which `apply` takes back. As on the page, a missing or
-  empty secret keeps the saved one; `null` removes it. An `email` body
-  without `smtp` keeps the saved SMTP settings.
+  empty secret (the webhook's URL is one) keeps the saved one; `null`
+  removes it. An `email` body without `smtp` keeps the saved SMTP settings.
 - Exit codes: `0` done; `1` refused, with the page's message and the field
   on stderr; `2` a wrong command or a body that is not JSON.
 - Logbook has no lists of settings and issues no tokens, so there is no
@@ -267,8 +269,9 @@ weaker `security`, needs the password again. `fromName` defaults to
 
 `webhook`: the URL that receives published entries, and the secret that
 signs each request ([webhook](webhooks.md)), at least 16 characters, such as
-the one Meldgrove Connector shows. `{"url": null}` turns the webhook off.
-The webhook has no test.
+the one Meldgrove Connector shows. Both are secrets; of the URL, Logbook shows
+only the server. `{"url": null}` turns the webhook off. The webhook has no
+test.
 
 ```json
 { "url": "https://hooks.example.org/logbook", "secret": "<signing secret>" }
@@ -284,29 +287,6 @@ jq -n --rawfile token slack-token '{botToken: ($token | rtrimstr("\n")), channel
 docker compose run --rm -T migrate cli settings test slack
 rm slack-token
 ```
-
-### Moved from `.env`
-
-Versions before Admin › Integrations read Slack, email, and the webhook from
-`.env`: `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID`, `SMTP_URL`,
-`MAILERSEND_API_TOKEN`, `MAIL_FROM`, `MAIL_FROM_NAME`, `WEBHOOK_URL`, and
-`WEBHOOK_SECRET`. Servers keep working without a step:
-
-- On start, the worker (and any other process that sees them) copies each
-  of these variables into the database once, into a field that is still
-  empty, with the page's checks. The audit log names the actor
-  `environment`. From then on the database wins and the variables are
-  ignored, also after an admin clears a field. An `smtp://` URL becomes
-  `auto` (STARTTLS when the server offers it, as before) on port 587 unless
-  it names another, `smtps://` becomes `tls` on 465.
-- Admin › Integrations, `cli settings list`, and one warning in the log at
-  start name each of them that is still set. Delete them from `.env` once
-  you no longer plan to go back to an earlier version, which reads them.
-- The worker needs `BETTER_AUTH_SECRET` to store and read the secrets. The
-  `compose.yaml` of earlier versions passes it to `web` only: with that
-  file, the worker keeps sending with the variables, as before, cannot
-  read what is saved on the page, and Admin › Integrations says so. Take the `compose.yaml` of this release
-  (`git pull`) and run `docker compose up -d`; the worker then copies them.
 
 ## Backups
 
@@ -326,9 +306,9 @@ While `BACKUP_URL` is empty, it idles.
 Keep `BETTER_AUTH_SECRET` apart from the backups: a restore needs it, the
 backups do not hold it, and Backups shows the name on the source page.
 Stored sign-in tokens and the secrets of Admin › Integrations (Slack's bot
-token, the SMTP password or MailerSend's token, the webhook's signing secret)
-are encrypted with it. Without it, people sign in again, and an admin enters
-those secrets again.
+token, the SMTP password or MailerSend's token, the webhook's URL and signing
+secret) are encrypted with it. Without it, people sign in again, and an admin
+enters those secrets again.
 
 With [automatic updates](#automatic-updates), run the updater's host setup
 again once the app's folder has updater 0.2.2 or later (`git pull`): its

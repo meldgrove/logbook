@@ -112,8 +112,8 @@ Meldgrove apps, Radix), sonner, pino, Vitest, Playwright.
   tests them. The page's Server Actions and `cli settings` both call it; the
   command acts as the operator (`operator()` in `src/lib/audit/actor.ts`,
   created only in `src/cli/`). The worker reads them each round
-  (`runtime.ts`). Their old variables are copied once on start
-  (`moved-variables.ts`); never read them anywhere else.
+  (`runtime.ts`). The webhook's URL is a secret too: show only its server
+  (`urlHint`).
 - Read application settings only through `src/lib/config.ts`, and
   operational settings (`LOG_LEVEL`, `LOGBOOK_PROCESS`,
   `WORKER_HEARTBEAT_FILE`, `MIGRATIONS_DIR`) through `envValue()` in

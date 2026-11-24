@@ -40,13 +40,6 @@ export interface NotificationChannels {
   email: ChannelMode;
   /** The webhook: live or off. */
   webhook?: ChannelMode;
-  /**
-   * Variables that moved to Admin › Integrations and are still set for the
-   * worker (names only), so the page can say they can be deleted.
-   */
-  movedVariables?: string[];
-  /** The worker has no BETTER_AUTH_SECRET (an older compose.yaml) and sends with those variables. */
-  settingsFromEnvironment?: boolean;
-  /** The worker has no BETTER_AUTH_SECRET, so it cannot read the secrets of Admin › Integrations. */
+  /** The worker has no BETTER_AUTH_SECRET (an older compose.yaml), so it cannot read the secrets of Admin › Integrations. */
   withoutKey?: boolean;
 }

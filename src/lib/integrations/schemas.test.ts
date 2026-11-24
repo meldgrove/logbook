@@ -53,9 +53,14 @@ describe("the bodies of Admin › Integrations", () => {
     expect(errorsOf(slackInputSchema.safeParse({ channelId: "#logbook" }))).toEqual({ channelId: "Enter the channel's ID (C…), not its name." });
   });
 
-  it("turn the webhook off with an empty URL, and take only http and https", () => {
-    expect(webhookInputSchema.parse({ url: "" }).url).toBeNull();
-    expect(errorsOf(webhookInputSchema.safeParse({ url: "ftp://hooks.example.org" }))).toEqual({ url: "Enter an http:// or https:// URL." });
+  it("turn the webhook off with a null URL, keep one left out or empty, and take only http and https, without repeating it", () => {
+    expect(webhookInputSchema.parse({ url: null }).url).toBeNull();
+    expect(webhookInputSchema.parse({}).url).toBeUndefined();
+    expect(webhookInputSchema.parse({ url: " " }).url).toBeUndefined();
+    expect(webhookInputSchema.parse({ url: " https://hooks.example.org/a?b=c " }).url).toBe("https://hooks.example.org/a?b=c");
+    const result = webhookInputSchema.safeParse({ url: "ftp://hooks.example.org/hunter2" });
+    expect(errorsOf(result)).toEqual({ url: "Enter an http:// or https:// URL." });
+    expect(JSON.stringify(result.error)).not.toContain("hunter2");
   });
 
   it("name a body that is not an object", () => {

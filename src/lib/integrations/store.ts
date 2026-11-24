@@ -8,7 +8,7 @@ import { EMAIL_PROVIDERS, INTEGRATION_NAMES, SMTP_SECURITY, type EmailProvider, 
 /*
  * The integrations as rows of `app_setting` (keys `slack`, `email`,
  * `webhook`), with every secret sealed (crypto.ts) next to its hint. A row
- * exists once the setting was saved or imported, also when it is off.
+ * exists once the setting was saved, also when it is off.
  */
 
 /** A sealed secret and the hint the page shows. */
@@ -31,7 +31,8 @@ export interface StoredEmail {
 }
 
 export interface StoredWebhook {
-  url: string | null;
+  /** Plain text as 0.3.3 saved it, until a process seals it at its start (start.ts). */
+  url: Sealed | string | null;
   secret: Sealed | null;
 }
 
@@ -101,7 +102,7 @@ const STORED_SCHEMAS = {
     mailersend: z.object({ token: sealedSchema }).catch({ token: null }),
   }),
   webhook: z.object({
-    url: z.string().nullable().catch(null),
+    url: z.union([z.string(), sealedSchema]),
     secret: sealedSchema,
   }),
 } as const;
@@ -111,8 +112,8 @@ export interface LoadedIntegrations {
 }
 
 /**
- * Makes saves and the import of moved variables wait for each other, also
- * while a setting has no row yet (FOR UPDATE locks only existing rows).
+ * Makes writers wait for each other, also while a setting has no row yet
+ * (FOR UPDATE locks only existing rows).
  */
 export async function lockIntegrations(tx: Transaction): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('logbook.integrations'))`);
@@ -135,7 +136,7 @@ export async function loadStored(db: Database | Transaction): Promise<LoadedInte
   return { stored };
 }
 
-/** Saves one setting's row. `updatedById` is the admin, or null for the operator and the import. */
+/** Saves one setting's row. `updatedById` is the admin, or null for the operator. */
 export async function writeStored<N extends IntegrationName>(
   tx: Transaction,
   name: N,
@@ -153,6 +154,7 @@ export const SECRET_FIELDS = {
   slackBotToken: "slack.botToken",
   smtpPassword: "email.smtp.password",
   mailerSendToken: "email.mailersend.token",
+  webhookUrl: "webhook.url",
   webhookSecret: "webhook.secret",
 } as const;
 
@@ -166,8 +168,8 @@ export type Unreadable = (typeof SECRET_FIELDS)[keyof typeof SECRET_FIELDS];
  */
 export function openStored(stored: StoredIntegrations, key: SealingKey | null): { integrations: Integrations; unreadable: Unreadable[] } {
   const unreadable: Unreadable[] = [];
-  const reveal = (field: Unreadable, value: Sealed | null): string | null => {
-    if (!value) return null;
+  const reveal = (field: Unreadable, value: Sealed | string | null): string | null => {
+    if (value === null || typeof value === "string") return value;
     if (!key) {
       unreadable.push(field);
       return null;
@@ -190,7 +192,7 @@ export function openStored(stored: StoredIntegrations, key: SealingKey | null): 
         smtp: { ...stored.email.smtp, password: reveal(SECRET_FIELDS.smtpPassword, stored.email.smtp.password) },
         mailersendToken: reveal(SECRET_FIELDS.mailerSendToken, stored.email.mailersend.token),
       },
-      webhook: { url: stored.webhook.url, secret: reveal(SECRET_FIELDS.webhookSecret, stored.webhook.secret) },
+      webhook: { url: reveal(SECRET_FIELDS.webhookUrl, stored.webhook.url), secret: reveal(SECRET_FIELDS.webhookSecret, stored.webhook.secret) },
     },
     unreadable,
   };

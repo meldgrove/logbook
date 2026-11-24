@@ -128,17 +128,19 @@ export const emailInputSchema = strict(
 );
 export type EmailInput = z.input<typeof emailInputSchema>;
 
+const httpUrl = z.url({ protocol: /^https?$/ });
+
 export const webhookInputSchema = strict(
   {
-    /** Where entries are posted; null turns the webhook off. */
-    url: optionalText(
-      text(2_000, "Use at most 2000 characters.").pipe(z.url({ protocol: /^https?$/, error: "Enter an http:// or https:// URL." })),
-    ),
+    /** Where entries are posted, a secret too: it can carry a token. null turns the webhook off. */
+    url: secret((value) => (httpUrl.safeParse(value).success ? undefined : "Enter an http:// or https:// URL.")),
     /** Signs every request (Logbook-Signature). */
     secret: secret((value) =>
       value.length >= MIN_WEBHOOK_SECRET_LENGTH ? undefined : `Use at least ${MIN_WEBHOOK_SECRET_LENGTH} characters.`,
     ),
     state: shown,
+    urlSaved: shown,
+    urlHint: shown,
     secretSaved: shown,
     secretHint: shown,
     warnings: shown,
@@ -185,7 +187,9 @@ export interface EmailView {
 
 export interface WebhookView {
   state: IntegrationState;
-  url: string | null;
+  urlSaved: boolean;
+  /** The URL's server. */
+  urlHint: string | null;
   secretSaved: boolean;
   secretHint: string | null;
   warnings: string[];
