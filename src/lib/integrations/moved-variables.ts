@@ -48,9 +48,10 @@ interface Smtp {
 }
 
 /**
- * An old SMTP_URL as the page's fields: smtps:// is TLS (465); smtp:// (587)
- * keeps nodemailer's behavior: STARTTLS when the server offers it (`auto`),
- * required with `requireTLS=true`, never with `ignoreTLS=true`.
+ * An old SMTP_URL as the page's fields, read as nodemailer read it: smtps://
+ * (or `secure=true`) is TLS (465); smtp:// (587) is STARTTLS when the server
+ * offers it (`auto`), required with `requireTLS`, which wins over
+ * `ignoreTLS`, never with `ignoreTLS` alone.
  */
 export function smtpFromUrl(value: string): Smtp | undefined {
   let url: URL;
@@ -60,7 +61,14 @@ export function smtpFromUrl(value: string): Smtp | undefined {
     return undefined;
   }
   if (url.protocol !== "smtp:" && url.protocol !== "smtps:") return undefined;
-  const tls = url.protocol === "smtps:";
+  // A query value as nodemailer takes it: "true"/"false", a number, or any other text (true unless empty).
+  const flag = (name: string): boolean | undefined => {
+    const value = url.searchParams.get(name);
+    if (value === null) return undefined;
+    if (value === "true" || value === "false") return value === "true";
+    return Number.isNaN(Number(value)) ? value !== "" : Number(value) !== 0;
+  };
+  const tls = flag("secure") ?? url.protocol === "smtps:";
   const decode = (part: string) => {
     try {
       return decodeURIComponent(part);
@@ -71,13 +79,7 @@ export function smtpFromUrl(value: string): Smtp | undefined {
   const smtp = {
     host: url.hostname,
     port: url.port ? Number(url.port) : tls ? 465 : 587,
-    security: (tls
-      ? "tls"
-      : url.searchParams.get("ignoreTLS") === "true"
-        ? "none"
-        : url.searchParams.get("requireTLS") === "true"
-          ? "starttls"
-          : "auto") as SmtpSecurity,
+    security: (tls ? "tls" : flag("requireTLS") ? "starttls" : flag("ignoreTLS") ? "none" : "auto") as SmtpSecurity,
     username: decode(url.username),
     password: url.password ? decode(url.password) : null,
   };

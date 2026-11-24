@@ -20,6 +20,11 @@ describe("smtpFromUrl", () => {
     });
     expect(smtpFromUrl("smtp://relay.internal:25?ignoreTLS=true")?.security).toBe("none");
     expect(smtpFromUrl("smtp://mail.example.org?requireTLS=true")?.security).toBe("starttls");
+    // As nodemailer reads the options: requireTLS wins over ignoreTLS, 1 counts as true, secure means TLS.
+    expect(smtpFromUrl("smtp://mail.example.org?requireTLS=true&ignoreTLS=true")?.security).toBe("starttls");
+    expect(smtpFromUrl("smtp://mail.example.org?requireTLS=1")?.security).toBe("starttls");
+    expect(smtpFromUrl("smtp://mail.example.org?ignoreTLS=false")?.security).toBe("auto");
+    expect(smtpFromUrl("smtp://mail.example.org?secure=true")).toMatchObject({ port: 465, security: "tls" });
   });
 
   it("refuses what is no SMTP URL", () => {

@@ -213,7 +213,8 @@ In a running container, such as a terminal on Coolify, the command is just
   Ctrl-D.
 - `apply` replaces the whole setting, as the page does: start from what
   `show` prints, which `apply` takes back. As on the page, a missing or
-  empty secret keeps the saved one; `null` removes it.
+  empty secret keeps the saved one; `null` removes it. An `email` body
+  without `smtp` keeps the saved SMTP settings.
 - Exit codes: `0` done; `1` refused, with the page's message and the field
   on stderr; `2` a wrong command or a body that is not JSON.
 - Logbook has no lists of settings and issues no tokens, so there is no

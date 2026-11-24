@@ -125,6 +125,14 @@ describe("saving on the page and with the command", () => {
     await expect(saveIntegration(db, "email", { ...kept, smtp: { ...kept.smtp, security: "auto" } }, amy, KEY)).rejects.toMatchObject({
       fieldErrors: { "smtp.password": "Enter the password again: the encryption is weaker now." },
     });
+    // A body without `smtp` keeps the saved SMTP settings, as the documented {"provider": "none"} does.
+    expect((await saveIntegration(db, "email", { provider: "none" }, amy, KEY)).view).toMatchObject({
+      state: "not set",
+      smtp: { host: "mail.example.org", passwordSaved: true },
+    });
+    expect(
+      (await saveIntegration(db, "email", { provider: "mailersend", fromAddress: "logbook@example.org", mailersend: { token: "mlsn.token-1234" } }, amy, KEY)).view,
+    ).toMatchObject({ state: "set", smtp: { host: "mail.example.org", passwordSaved: true } });
     // The same server and protection keep it; a new password or none at all may go anywhere.
     expect((await saveIntegration(db, "email", { ...kept, smtp: { ...kept.smtp, port: 465, security: "tls" } }, amy, KEY)).view.state).toBe("set");
     expect((await saveIntegration(db, "email", { ...elsewhere, smtp: { ...elsewhere.smtp, password: "a-new-password-0000" } }, amy, KEY)).view).toMatchObject({
@@ -278,6 +286,20 @@ describe("variables that moved out of .env", () => {
   it("wait while the process has no BETTER_AUTH_SECRET", async () => {
     expect(await importMovedVariables(db, { env: OLD, key: null })).toMatchObject({ copied: [], waiting: Object.keys(OLD) });
     expect(await rows()).toEqual({});
+  });
+
+  it("are named also when the worker has no BETTER_AUTH_SECRET and no old variables", async () => {
+    await db.insert(workerHeartbeat).values({
+      workerId: "w1",
+      startedAt: new Date(),
+      beatAt: new Date(),
+      channels: { slack: "off", email: "off", movedVariables: [], settingsFromEnvironment: false, withoutKey: true },
+    });
+    const views = await integrationViews(db, await viewContext(db, { SLACK_BOT_TOKEN: TOKEN }));
+    expect(views.slack.warnings).toEqual([
+      expect.stringMatching(/so it cannot read the secrets saved here/),
+      "SLACK_BOT_TOKEN is still set in the environment. Logbook no longer reads it: this page holds the setting. Delete it from .env.",
+    ]);
   });
 
   it("are named on the page while they are still set, for this process or the worker", async () => {

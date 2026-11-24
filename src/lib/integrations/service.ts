@@ -146,7 +146,9 @@ function warningsFor(name: IntegrationName, context: ViewContext, unreadable: Un
     warnings.push(
       `The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it ${reads}. Give it the compose.yaml of this release (docs/deployment.md, "Moved from .env").`,
     );
-  } else if (leftovers.length > 0) {
+  }
+  // The worker that reads them names them above; any other process names them here.
+  if (leftovers.length > 0 && !context.settingsFromEnvironment) {
     warnings.push(
       `${list(leftovers)} ${one ? "is" : "are"} still set in the environment. Logbook no longer reads ${one ? "it" : "them"}: this page holds the setting. Delete ${one ? "it" : "them"} from .env.`,
     );
@@ -265,17 +267,21 @@ const SECURITY_STRENGTH: Record<SmtpSecurity, number> = { tls: 2, starttls: 2, a
 
 function nextEmail(current: StoredEmail, body: unknown, key: SealingKey | null): StoredEmail {
   const input = INPUT_SCHEMAS.email.parse(body);
+  // A body without `smtp`, such as {"provider": "none"}, keeps the saved SMTP settings.
+  const smtpGiven = typeof body === "object" && body !== null && "smtp" in body;
   const next: StoredEmail = {
     provider: input.provider,
     fromAddress: input.fromAddress,
     fromName: input.fromName,
-    smtp: {
-      host: input.smtp.host,
-      port: input.smtp.port,
-      security: input.smtp.security,
-      username: input.smtp.username,
-      password: nextSecret(current.smtp.password, input.smtp.password, SECRET_FIELDS.smtpPassword, key, "smtp.password"),
-    },
+    smtp: smtpGiven
+      ? {
+          host: input.smtp.host,
+          port: input.smtp.port,
+          security: input.smtp.security,
+          username: input.smtp.username,
+          password: nextSecret(current.smtp.password, input.smtp.password, SECRET_FIELDS.smtpPassword, key, "smtp.password"),
+        }
+      : current.smtp,
     mailersend: {
       token: nextSecret(current.mailersend.token, input.mailersend.token, SECRET_FIELDS.mailerSendToken, key, "mailersend.token"),
     },
@@ -285,7 +291,7 @@ function nextEmail(current: StoredEmail, body: unknown, key: SealingKey | null):
   if (next.fromAddress && !z.email().safeParse(next.fromAddress).success) errors.fromAddress = "Enter an email address.";
   // A kept password must not reach another server, or travel less protected,
   // also not by changing the server while another provider is chosen.
-  const kept = input.smtp.password === undefined && next.smtp.password !== null;
+  const kept = smtpGiven && input.smtp.password === undefined && next.smtp.password !== null;
   if (kept && next.smtp.host !== current.smtp.host) {
     errors["smtp.password"] = "Enter the password again: the mail server changed.";
   } else if (kept && SECURITY_STRENGTH[next.smtp.security] < SECURITY_STRENGTH[current.smtp.security]) {
