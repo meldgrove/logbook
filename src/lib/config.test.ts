@@ -228,4 +228,14 @@ describe("parseUpdaterConfig", () => {
       /UPDATER_URL/,
     );
   });
+
+  it("takes an optional token for the updater; blank means none", () => {
+    expect(parseUpdaterConfig({}).UPDATER_TOKEN).toBeUndefined();
+    expect(parseUpdaterConfig({ UPDATER_TOKEN: " " }).UPDATER_TOKEN).toBeUndefined();
+    expect(parseUpdaterConfig({ UPDATER_TOKEN: "0123abcd" }).UPDATER_TOKEN).toBe("0123abcd");
+    expect(() => parseUpdaterConfig({ UPDATER_TOKEN: "two words" })).toThrow(/UPDATER_TOKEN/);
+    expect(() => validateWebConfig({ ...auth, ...manualDirectory, DATABASE_URL: "postgres://x", UPDATER_TOKEN: "tok\u00e9n" })).toThrow(
+      /UPDATER_TOKEN/,
+    );
+  });
 });

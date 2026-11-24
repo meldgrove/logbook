@@ -1,19 +1,22 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { UpdatesService } from "@/lib/updates/service";
+import { startFakeUpdater, updaterStatus, type FakeUpdater } from "@meldgrove/ui/updates/testing";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 import { POST as check } from "./check/route";
 import { POST as install } from "./install/route";
 import { POST as channel } from "./channel/route";
 
+/*
+ * The four routes with Logbook's real access check and the package's handler,
+ * against a fake updater that requires a token, as the updater does with
+ * API_TOKEN set. What the package answers in each case is tested there.
+ */
+
+const TOKEN = "updater-token-for-tests";
+
 const mocks = vi.hoisted(() => ({
   /** The person behind the session; null: no session. */
   person: vi.fn(),
-  service: {
-    status: vi.fn(),
-    check: vi.fn(),
-    install: vi.fn(),
-    channel: vi.fn(),
-  } satisfies Record<keyof UpdatesService, unknown>,
+  updater: { UPDATER_URL: null as string | null, UPDATER_TOKEN: undefined as string | undefined },
 }));
 // The real access check in src/lib/auth/session.ts, with the request's session stubbed.
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
@@ -29,27 +32,40 @@ vi.mock("@/lib/auth/auth", () => ({
 vi.mock("@/lib/config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/config")>()),
   getAuthConfig: () => ({ LOGBOOK_BASE_URL: "https://logbook.example.org" }),
+  getUpdaterConfig: () => mocks.updater,
+  getVersionConfig: () => ({ APP_VERSION: "0.2.0" }),
 }));
-vi.mock("@/lib/updates/service", () => ({ getUpdatesService: () => mocks.service }));
 
 const BASE = "https://logbook.example.org/api/admin/updates";
 const ADMIN = { id: "admin", hasAccess: true, isAdmin: true };
 const MEMBER = { id: "member", hasAccess: true, isAdmin: false };
 const FORMER_ADMIN = { id: "former", hasAccess: false, isAdmin: true };
-const ANSWER = { app: { version: "0.2.0" }, reachable: true, updater: null, error: null };
 
 function post(path: string, body?: unknown, origin: string | null = "https://logbook.example.org"): Request {
   return new Request(`${BASE}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json", ...(origin ? { origin } : {}) },
-    body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
+
+let updater: FakeUpdater;
+
+beforeAll(async () => {
+  updater = await startFakeUpdater({ token: TOKEN });
+});
+
+afterAll(async () => {
+  await updater.close();
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.person.mockResolvedValue(ADMIN);
-  for (const call of Object.values(mocks.service)) call.mockResolvedValue({ httpStatus: 200, body: ANSWER });
+  mocks.updater.UPDATER_URL = updater.url;
+  mocks.updater.UPDATER_TOKEN = TOKEN;
+  updater.calls.length = 0;
+  updater.respond(() => ({ body: updaterStatus() }));
 });
 
 const routes = [
@@ -65,39 +81,48 @@ describe("/api/admin/updates", () => {
       mocks.person.mockResolvedValue(person);
       const response = await call();
       expect(response.status).toBe(404);
+      expect(response.headers.get("cache-control")).toBe("no-store");
     }
-    for (const method of Object.values(mocks.service)) expect(method).not.toHaveBeenCalled();
+    expect(updater.calls).toEqual([]);
   });
 
-  it.each(routes)("%s answers admins with the service's reply", async (_name, call) => {
-    const response = await call();
+  it("answers admins with the updater's status, asked with UPDATER_TOKEN", async () => {
+    const response = await GET(new Request(BASE));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual(ANSWER);
+    expect(await response.json()).toEqual({ app: { version: "0.2.0" }, reachable: true, updater: updaterStatus(), error: null });
+    expect(updater.calls).toEqual([{ method: "GET", path: "/v1/status", body: null, authorization: `Bearer ${TOKEN}` }]);
   });
 
-  it("passes 202, 409, and the request's values through", async () => {
-    mocks.service.install.mockResolvedValue({ httpStatus: 202, body: ANSWER });
-    expect((await install(post("/install", { version: "0.2.1-preview.3" }))).status).toBe(202);
-    expect(mocks.service.install).toHaveBeenCalledWith("0.2.1-preview.3");
+  it("passes check, install, and channel on to the updater with the token", async () => {
+    const installing = updaterStatus({ installing: { version: "0.2.1", startedAt: "2026-11-24T10:00:00.000Z", manual: true, stage: "requested" } });
+    updater.respond((call) => (call.path === "/v1/install" ? { status: 202, body: installing } : { body: updaterStatus() }));
 
-    const refused = { ...ANSWER, error: "The platform's image tag decides." };
-    mocks.service.channel.mockResolvedValue({ httpStatus: 409, body: refused });
-    const response = await channel(post("/channel", { channel: "stable" }));
-    expect(response.status).toBe(409);
-    expect(await response.json()).toEqual(refused);
-    expect(mocks.service.channel).toHaveBeenCalledWith("stable");
-
-    await install(post("/install", { version: "sha256:0123456789ab" }));
-    expect(mocks.service.install).toHaveBeenLastCalledWith("sha256:0123456789ab");
-  });
-
-  it("passes a 5xx of the install request through, never as 409", async () => {
-    const failed = { ...ANSWER, error: "The update service answered HTTP 503." };
-    mocks.service.install.mockResolvedValue({ httpStatus: 503, body: failed });
+    expect((await check(post("/check"))).status).toBe(200);
     const response = await install(post("/install", { version: "0.2.1" }));
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual(failed);
+    expect(response.status).toBe(202);
+    expect((await response.json()).updater).toEqual(installing);
+    expect((await channel(post("/channel", { channel: "preview" }))).status).toBe(200);
+
+    expect(updater.calls).toEqual([
+      { method: "POST", path: "/v1/check", body: null, authorization: `Bearer ${TOKEN}` },
+      { method: "POST", path: "/v1/install", body: { version: "0.2.1" }, authorization: `Bearer ${TOKEN}` },
+      { method: "POST", path: "/v1/channel", body: { channel: "preview" }, authorization: `Bearer ${TOKEN}` },
+    ]);
+  });
+
+  it("without UPDATER_TOKEN, asks an updater that needs none without a token, as before", async () => {
+    const open = await startFakeUpdater();
+    try {
+      mocks.updater.UPDATER_URL = open.url;
+      mocks.updater.UPDATER_TOKEN = undefined;
+      const response = await GET(new Request(BASE));
+      expect(response.status).toBe(200);
+      expect((await response.json()).updater).toEqual(updaterStatus({ apiToken: false }));
+      expect(open.calls).toEqual([{ method: "GET", path: "/v1/status", body: null, authorization: null }]);
+    } finally {
+      await open.close();
+    }
   });
 
   it.each([
@@ -112,29 +137,13 @@ describe("/api/admin/updates", () => {
     ]) {
       expect((await call()).status).toBe(403);
     }
-    for (const method of Object.values(mocks.service)) expect(method).not.toHaveBeenCalled();
+    expect(updater.calls).toEqual([]);
   });
 
-  it.each([
-    [{ version: "latest" }],
-    [{ version: "0.2" }],
-    [{ version: "0.2.1-rc.1" }],
-    [{ version: "0.2.1; rm -rf /" }],
-    [{ version: "sha256:0123456789abcdef" }],
-    [{ version: 21 }],
-    [{}],
-    ["not json"],
-    [undefined],
-  ])("refuses to install %j with 400", async (body) => {
-    const response = await install(post("/install", body));
+  it("refuses a version that is not one with 400, without asking the updater", async () => {
+    const response = await install(post("/install", { version: "latest" }));
     expect(response.status).toBe(400);
     expect((await response.json()).error).toMatch(/version/);
-    expect(mocks.service.install).not.toHaveBeenCalled();
-  });
-
-  it.each([[{ channel: "beta" }], [{ channel: "Stable" }], [{}], ["{"]])("refuses the channel %j with 400", async (body) => {
-    const response = await channel(post("/channel", body));
-    expect(response.status).toBe(400);
-    expect(mocks.service.channel).not.toHaveBeenCalled();
+    expect(updater.calls).toEqual([]);
   });
 });

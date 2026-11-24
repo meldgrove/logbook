@@ -30,8 +30,11 @@ x-app-environment: &app-environment
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
   TZ: ${TZ:-UTC}
   LOG_LEVEL: ${LOG_LEVEL:-info}
-  # The update button and the Updates card on the admin page ask `updater`.
+  # The update button and the Updates card on the admin page ask `updater`,
+  # with UPDATER_TOKEN (recommended; openssl rand -hex 32), which the updater
+  # then requires.
   UPDATER_URL: ${UPDATER_URL:-http://updater:8080}
+  UPDATER_TOKEN: ${UPDATER_TOKEN:-}
 
 x-directory-environment: &directory-environment
   LOGBOOK_BASE_URL: ${LOGBOOK_BASE_URL:-${LOGBUCH_BASE_URL:?set LOGBOOK_BASE_URL to the public URL}}
@@ -123,14 +126,15 @@ services:
   # host-setup`: then admins choose Stable or Preview in Logbook, and for each
   # installation the server writes the version into LOGBOOK_VERSION, pulls it,
   # runs `docker compose up --wait`, and goes back to the version before when
-  # it does not become healthy. No ports: its API has no authentication, and
-  # only `web` calls it.
+  # it does not become healthy. No ports: only `web` calls its API. With
+  # UPDATER_TOKEN, the API takes only requests that carry it.
   updater:
     image: ghcr.io/meldgrove/updater:0.2
     restart: unless-stopped
     environment:
       IMAGE: *image
       VERSION_VARIABLE: LOGBOOK_VERSION
+      API_TOKEN: ${UPDATER_TOKEN:-}
       # A release installs once it has been out this long, and only inside
       # the window, if one is set (e.g. 02:00-05:00, in the time zone TZ).
       COOLDOWN: ${UPDATE_COOLDOWN:-3d}

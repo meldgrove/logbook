@@ -112,9 +112,11 @@ run the commands as root (`sudo -i`).
    ([configuration](configuration.md)): `LOGBOOK_VERSION` (the newest
    release, such as `0.2.0`; the updater keeps it current), `LOGBOOK_BASE_URL`,
    `DATABASE_URL`, a new `BETTER_AUTH_SECRET`
-   (`openssl rand -base64 32`), the `OIDC_*` variables, and `DIRECTORY` with
-   its settings. Remove `NOTIFICATION_TRANSPORT` (production sends for real).
-   Slack, email, and the webhook are not set here: see step 7.
+   (`openssl rand -base64 32`), an `UPDATER_TOKEN` (`openssl rand -hex 32`,
+   recommended: [it protects the update service](#protect-the-update-service)),
+   the `OIDC_*` variables, and `DIRECTORY` with its settings. Remove
+   `NOTIFICATION_TRANSPORT` (production sends for real). Slack, email, and the
+   webhook are not set here: see step 7.
 
    Without a PostgreSQL of your own, set these values for the database.
    `COMPOSE_FILE` makes every `docker compose` command also use
@@ -388,7 +390,11 @@ but cannot install them.
 The **Updates** card on the admin page shows the installed version, the
 channel, and whether updates install automatically. The button and the card
 ask the updater at `UPDATER_URL` ([configuration](configuration.md#updates-web));
-without one, they say that there is no update service.
+without one, they say that there is no update service. Never publish the
+updater's port. With `UPDATER_TOKEN` set, Logbook sends it with each request,
+and the updater refuses requests without it; without it, anything that
+reaches the updater on the Docker network could install an offered update or
+switch the channel.
 
 ### Setup on the server
 
@@ -426,6 +432,28 @@ git pull
 docker compose up -d --pull always
 docker compose run --rm -T --pull always updater host-setup > updater-setup.sh && sudo sh updater-setup.sh
 ```
+
+### Protect the update service
+
+Recommended for installations set up before `UPDATER_TOKEN` existed; without
+it, everything works as before. Until it is done, the **Updates** card on the
+admin page warns that the update service takes requests without a token
+(with updater 0.2.4 or later, which reports it). Do it once Logbook runs the
+release whose notes name this step, or a newer one: an older version does
+not send the token, and its update button would get no answer from the
+updater. As root in `/srv/logbook`:
+
+```sh
+git pull
+# in .env: UPDATER_TOKEN=<the output of: openssl rand -hex 32>
+docker compose pull updater
+docker compose up -d
+```
+
+`git pull` brings the `compose.yaml` that passes the token to Logbook and to
+the updater (as `API_TOKEN`); `docker compose pull updater` makes sure the
+updater is one that checks it. Then the updater takes only requests that
+carry the token.
 
 ## Importing old entries from a CSV file
 
