@@ -2,7 +2,7 @@ import { setImmediate } from "node:timers/promises";
 import { describe, expect, it, vi } from "vitest";
 import { createDateFormatter, dateToken } from "@/lib/format";
 import { emailContent, slackText } from "./format-message";
-import { createMailerSendTransport, createSlackTransport, createSmtpTransport, DeliveryError } from "./transports";
+import { channelModes, createMailerSendTransport, createSlackTransport, createSmtpTransport, createTransports, DeliveryError } from "./transports";
 import type { NotificationMessage } from "./types";
 
 const MESSAGE: NotificationMessage = {
@@ -100,6 +100,14 @@ describe("Slack", () => {
     await createSlackTransport("xoxb-1", fetchImpl).postMessage("U123", "Hello");
     expect(calls[0]!.url).toBe("https://slack.com/api/chat.postMessage");
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ channel: "U123", text: "Hello", unfurl_links: false, unfurl_media: false });
+  });
+
+  it("checks the token with auth.test for the test button", async () => {
+    const { fetchImpl, calls } = fakeFetch(json({ ok: true, team: "Acme", user: "logbook" }), json({ ok: false, error: "invalid_auth" }));
+    const slack = createSlackTransport("xoxb-1", fetchImpl);
+    await expect(slack.testAuth()).resolves.toEqual({ team: "Acme", user: "logbook" });
+    expect(calls[0]!.url).toBe("https://slack.com/api/auth.test");
+    await expect(slack.testAuth()).rejects.toMatchObject({ name: "DeliveryError", code: "invalid_auth" });
   });
 
   it("reports Slack errors and rate limits so the worker can retry", async () => {
@@ -205,12 +213,19 @@ describe("SMTP", () => {
     return { createTransport, created };
   }
 
-  it("sends through the SMTP URL from the configured address", async () => {
+  const SMTP = { host: "mail.example.org", port: 587, security: "starttls" as const, username: "", password: null, from: "logbook@example.org", fromName: "Logbook" };
+
+  it("sends through the mail server from the configured address", async () => {
     const sendMail = vi.fn(async () => ({ messageId: "1" }));
     const { createTransport, created } = fakeNodemailer(sendMail);
-    await createSmtpTransport({ url: "smtps://user:pass@mail.example.org:465", from: "logbook@example.org", fromName: "Logbook" }, createTransport).send(email);
+    await createSmtpTransport({ ...SMTP, port: 465, security: "tls", username: "user", password: "pass" }, createTransport).send(email);
     expect(created[0]).toEqual({
-      url: "smtps://user:pass@mail.example.org:465",
+      host: "mail.example.org",
+      port: 465,
+      secure: true,
+      requireTLS: false,
+      ignoreTLS: false,
+      auth: { user: "user", pass: "pass" },
       connectionTimeout: 15_000,
       greetingTimeout: 15_000,
       socketTimeout: 15_000,
@@ -224,10 +239,20 @@ describe("SMTP", () => {
     });
   });
 
+  it("requires STARTTLS, or never uses TLS, as the security setting says; no login without a user name", async () => {
+    const { createTransport, created } = fakeNodemailer(async () => ({}));
+    createSmtpTransport(SMTP, createTransport);
+    createSmtpTransport({ ...SMTP, port: 25, security: "none" }, createTransport);
+    expect(created).toMatchObject([
+      { port: 587, secure: false, requireTLS: true, ignoreTLS: false, auth: undefined },
+      { port: 25, secure: false, requireTLS: false, ignoreTLS: true, auth: undefined },
+    ]);
+  });
+
   it("reports a rejected email with the server's reply code", async () => {
     const error = Object.assign(new Error("Mailbox unavailable"), { responseCode: 550, code: "EENVELOPE" });
     const { createTransport } = fakeNodemailer(async () => Promise.reject(error));
-    const transport = createSmtpTransport({ url: "smtp://mail.example.org", from: "logbook@example.org", fromName: "Logbook" }, createTransport);
+    const transport = createSmtpTransport(SMTP, createTransport);
     await expect(transport.send(email)).rejects.toThrow(/SMTP 550: Mailbox unavailable/);
     await expect(transport.send(email)).rejects.toBeInstanceOf(DeliveryError);
   });
@@ -241,8 +266,46 @@ describe("SMTP", () => {
       Object.assign(new Error("Connection timeout"), { code: "ETIMEDOUT" }),
     ];
     const { createTransport } = fakeNodemailer(async () => Promise.reject(errors.shift()));
-    const transport = createSmtpTransport({ url: "smtp://mail.example.org", from: "logbook@example.org", fromName: "Logbook" }, createTransport);
+    const transport = createSmtpTransport(SMTP, createTransport);
     const permanent = async () => ((await transport.send(email).catch((error: unknown) => error)) as DeliveryError).permanent;
     expect([await permanent(), await permanent(), await permanent(), await permanent(), await permanent()]).toEqual([true, true, true, false, false]);
+  });
+});
+
+describe("createTransports", () => {
+  const off = {
+    slack: { botToken: null, channelId: null },
+    email: {
+      provider: "none" as const,
+      fromAddress: "",
+      fromName: "",
+      smtp: { host: "", port: 587, security: "starttls" as const, username: "", password: null },
+      mailersendToken: null,
+    },
+  };
+  const base = { mode: "live" as const, baseUrl: "https://logbook.example" };
+
+  it("turns a channel off until its settings are complete", () => {
+    expect(channelModes(createTransports({ ...base, ...off }))).toEqual({ slack: "off", slackChannel: "off", email: "off" });
+    const half = { ...off.email, provider: "smtp" as const, smtp: { ...off.email.smtp, host: "mail.example.org", username: "user" } };
+    // A user name without a password, or no sender: email stays off.
+    expect(createTransports({ ...base, ...off, email: { ...half, fromAddress: "logbook@example.org" } }).email).toBeUndefined();
+    expect(createTransports({ ...base, ...off, email: { ...half, smtp: { ...half.smtp, password: "p" } } }).email).toBeUndefined();
+  });
+
+  it("uses the saved provider and token", () => {
+    const transports = createTransports({
+      ...base,
+      slack: { botToken: "xoxb-1", channelId: "C0123456" },
+      email: { ...off.email, provider: "mailersend", fromAddress: "logbook@example.org", mailersendToken: "mlsn.1" },
+    });
+    expect(transports.email?.kind).toBe("mailersend");
+    expect(transports.slackChannelId).toBe("C0123456");
+    expect(channelModes(transports)).toEqual({ slack: "live", slackChannel: "live", email: "live" });
+  });
+
+  it("only logs in console mode, whatever is saved", () => {
+    const transports = createTransports({ ...base, mode: "console", ...off });
+    expect(channelModes(transports)).toEqual({ slack: "console", slackChannel: "console", email: "console" });
   });
 });

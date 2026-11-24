@@ -152,7 +152,7 @@ async function send(
 ): Promise<Skip | Sent> {
   if (delivery.channel === "slack_channel") {
     if (!transports.slack) return new Skip("Slack is not configured.");
-    if (!transports.slackChannelId) return new Skip("No Slack channel is configured (SLACK_CHANNEL_ID).");
+    if (!transports.slackChannelId) return new Skip("No Slack channel is set (Admin › Integrations).");
     await transports.slack.postMessage(transports.slackChannelId, slackText(delivery.message, transports.baseUrl, defaultFormatter));
     return { channel: "slack_channel" };
   }
@@ -233,14 +233,15 @@ export async function dispatchDue(
 }
 
 /**
- * Polls for due deliveries every `intervalMs`. Returns a function that stops
- * and waits for the current run. A claimed delivery whose connection drops
- * stays pending: its transaction rolls back. Connection errors go to the
- * outage watch, as does each run that reached the database.
+ * Polls for due deliveries every `intervalMs`, with the transports of the
+ * settings at that moment. Returns a function that stops and waits for the
+ * current run. A claimed delivery whose connection drops stays pending: its
+ * transaction rolls back. Connection errors go to the outage watch, as does
+ * each run that reached the database.
  */
 export function startDispatcher(options: {
   db: Database;
-  transports: Transports;
+  transports: () => Promise<Transports>;
   intervalMs: number;
   outage: OutageWatch;
 }): () => Promise<void> {
@@ -248,7 +249,9 @@ export function startDispatcher(options: {
   let stopped = false;
   const tick = () => {
     if (running || stopped) return;
-    running = dispatchDue(options.db, options.transports)
+    running = options
+      .transports()
+      .then((transports) => dispatchDue(options.db, transports))
       .then(
         () => options.outage.answered(),
         (error: unknown) => {

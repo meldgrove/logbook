@@ -1,8 +1,12 @@
 # Webhook
 
-With `WEBHOOK_URL` and `WEBHOOK_SECRET` set, the worker posts entries to that
-URL as JSON, for example to keep a search index, a knowledge base, or an AI
-assistant up to date.
+With a URL and a signing secret set under **Admin › Integrations** (or with
+`cli settings apply webhook`, see
+[deployment](deployment.md#settings-from-the-command-line)), the worker posts
+entries to that URL as JSON, for example to keep a search index, a knowledge
+base, or an AI assistant up to date. Earlier versions read them from
+`WEBHOOK_URL` and `WEBHOOK_SECRET`; Logbook copies those once
+([moved from `.env`](deployment.md#moved-from-env)).
 
 ## What is sent
 
@@ -14,9 +18,10 @@ An entry is sent when it is published, and again whenever it changes: an
 edit, a new impact, an addendum, or when a newer decision replaces it. Every
 request carries the whole entry as it is now, so a receiver stores it by
 `entry.id` and replaces what it had. Changes go out within a minute. Every
-night at 02:30 (server time) the worker re-sends any entry whose content
-differs from what the receiver last got; the first run after the webhook is
-turned on sends every entry.
+night at 02:30 (server time), and right after the webhook is turned on or
+gets a new URL, the worker re-sends any entry whose content differs from what
+the receiver last got; the first run after the webhook is turned on sends
+every entry.
 
 ```json
 {
@@ -74,7 +79,7 @@ Every request has these headers:
 | Header | Value |
 |---|---|
 | `Logbook-Timestamp` | Unix time in seconds when the request was sent |
-| `Logbook-Signature` | `sha256=` and the hex HMAC-SHA256 of `<timestamp>.<raw body>`, keyed with `WEBHOOK_SECRET` |
+| `Logbook-Signature` | `sha256=` and the hex HMAC-SHA256 of `<timestamp>.<raw body>`, keyed with the signing secret |
 | `Logbook-Delivery` | A random ID of this request |
 
 Existing receivers can still read `Logbuch-Timestamp`, `Logbuch-Signature`,

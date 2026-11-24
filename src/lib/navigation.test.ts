@@ -41,6 +41,7 @@ describe("breadcrumbsFor", () => {
     ["/new/update", [{ label: "Timeline", href: "/" }, { label: "New entry" }]],
     ["/admin", [{ label: "Admin" }]],
     ["/admin/tags", [{ label: "Admin", href: "/admin" }, { label: "Tags" }]],
+    ["/admin/integrations", [{ label: "Admin", href: "/admin" }, { label: "Integrations" }]],
     ["/settings", [{ label: "Settings" }]],
     ["/e/lb-12", [{ label: "Timeline", href: "/" }, { label: "LB-12" }]],
     [

@@ -156,8 +156,26 @@ jobs:
     name: Docker image
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: logbook
+          POSTGRES_PASSWORD: logbook
+          POSTGRES_DB: logbook
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U logbook -d logbook"
+          --health-interval 5s --health-timeout 3s --health-retries 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build -t logbook:ci .
       - name: The image runs as a non-root user
         run: test "$(docker run --rm --entrypoint id logbook:ci -u)" = "1000"
+      - name: The operator command runs in the image, also from the PATH
+        run: |
+          env_args=(-e DATABASE_URL=postgres://logbook:logbook@localhost:5432/logbook -e BETTER_AUTH_SECRET="$(openssl rand -base64 32)")
+          docker run --rm --network host "${env_args[@]}" logbook:ci migrate
+          docker run --rm --network host "${env_args[@]}" logbook:ci cli help | grep -q "cli settings list"
+          # `cli` is on the PATH too (docker compose exec web cli …).
+          docker run --rm --network host "${env_args[@]}" --entrypoint cli logbook:ci settings list | grep -Eq '^slack +not set'

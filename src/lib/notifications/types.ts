@@ -35,9 +35,16 @@ export type ChannelMode = "live" | "console" | "off";
 
 export interface NotificationChannels {
   slack: ChannelMode;
-  /** Posts to the Slack channel: needs Slack and SLACK_CHANNEL_ID. */
+  /** Posts to the Slack channel: needs Slack and a channel. */
   slackChannel?: ChannelMode;
   email: ChannelMode;
   /** The webhook: live or off. */
   webhook?: ChannelMode;
+  /**
+   * Variables that moved to Admin › Integrations and are still set for the
+   * worker (names only), so the page can say they can be deleted.
+   */
+  movedVariables?: string[];
+  /** The worker has no BETTER_AUTH_SECRET (an older compose.yaml) and sends with those variables. */
+  settingsFromEnvironment?: boolean;
 }

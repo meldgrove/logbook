@@ -1,6 +1,6 @@
-// Bundles the worker and the operational scripts into dist/ with esbuild.
-// The Docker image runs them with plain `node`, next to the Next.js
-// standalone server.
+// Bundles the worker, the operational scripts, and the operator command
+// (`cli`) into dist/ with esbuild. The Docker image runs them with plain
+// `node`, next to the Next.js standalone server.
 import { build } from "esbuild";
 
 await build({
@@ -10,6 +10,7 @@ await build({
     migrate: "src/scripts/migrate.ts",
     "directory-sync": "src/scripts/directory-sync.ts",
     "import-entries": "src/scripts/import-entries.ts",
+    cli: "src/cli/entry.ts",
   },
   outdir: "dist",
   outExtension: { ".js": ".mjs" },

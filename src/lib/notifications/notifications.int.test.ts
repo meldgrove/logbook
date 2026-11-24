@@ -284,6 +284,7 @@ function fakeTransports(options: { slackUsers?: Record<string, string>; email?: 
   const lookups: string[] = [];
   const slack: SlackTransport = {
     mode: "live",
+    testAuth: async () => ({ team: "Test", user: "logbook" }),
     async lookupUserByEmail(email) {
       lookups.push(email);
       return options.slackUsers?.[email] ?? null;
@@ -476,6 +477,7 @@ describe("the worker's sender", () => {
       db.update(person).set({ workEmail: "amy.new@example.org", slackUserId: null, slackLookupFailedAt: null }).where(eq(person.id, amy.personId));
     const racing = (found: string | null): SlackTransport => ({
       mode: "live",
+      testAuth: async () => ({ team: "Test", user: "logbook" }),
       async lookupUserByEmail() {
         await changeEmail();
         return found;
@@ -555,7 +557,7 @@ describe("the Logbook Slack channel", () => {
     await update();
     await dispatchDue(db, { ...fake.transports, slackChannelId: undefined }, () => WEDNESDAY);
     const second = (await deliveries("channel.update")).find((d) => d.id !== post!.id);
-    expect(second).toMatchObject({ status: "skipped", lastError: "No Slack channel is configured (SLACK_CHANNEL_ID)." });
+    expect(second).toMatchObject({ status: "skipped", lastError: "No Slack channel is set (Admin › Integrations)." });
   });
 
   it("shows the summary, impact, and affected teams in each post, for proposals too", async () => {

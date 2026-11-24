@@ -21,6 +21,8 @@ meetings.
   reminders before deadlines, and one Slack channel post per new entry.
 - **Webhook**: published entries are posted as signed JSON, for example to a
   search index or a knowledge base.
+- **Integrations**: admins set up Slack, email, and the webhook in Logbook;
+  on the server, `cli settings` sets the same without a browser.
 - **Personal preferences**: everyone chooses their time zone and date
   format, and light or dark appearance.
 - **Updates**: new releases install automatically, or with one click on the
@@ -50,12 +52,13 @@ Logbook itself; see [Deployment](docs/deployment.md).
 
 ## Documentation
 
-- [Configuration](docs/configuration.md): every environment variable
+- [Configuration](docs/configuration.md): every environment variable, and
+  the settings of Admin › Integrations
 - [Identity and access](docs/identity-and-access.md): OpenID Connect, the
   manual directory, and the Keycloak directory
 - [Deployment](docs/deployment.md): running it on a Linux server (Debian,
-  Ubuntu), health checks, operations, automatic updates, and the CSV import
-  of old entries
+  Ubuntu), health checks, operations, settings from the command line,
+  automatic updates, and the CSV import of old entries
 - [Coolify](docs/coolify.md): running it on Coolify instead
 - [Decision process](docs/decision-process.md): how proposals become
   decisions

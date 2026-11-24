@@ -17,6 +17,11 @@ case "$role" in
   directory-sync)
     exec node dist/directory-sync.mjs
     ;;
+  cli)
+    # The operator command (src/cli/entry.ts): `cli settings …`.
+    shift
+    exec node /app/dist/cli.mjs "$@"
+    ;;
   *)
     exec "$@"
     ;;

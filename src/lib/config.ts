@@ -4,9 +4,14 @@ import { z } from "zod";
  * Environment configuration, validated with zod.
  *
  * Each process validates only what it needs: `migrate` needs the database,
- * the worker also needs the directory, notifications, and the webhook, and
- * the web process needs the database, login, and the directory. Empty strings
- * count as unset, because some platforms pass unset variables as "".
+ * the worker also needs the directory and the notification mode, and the web
+ * process needs the database, login, and the directory. Empty strings count
+ * as unset, because some platforms pass unset variables as "".
+ *
+ * Slack, email, and the webhook are not configured here: admins set them
+ * under Admin › Integrations or with `cli settings` (src/lib/integrations).
+ * Their old variables are read only by `movedVariables()`, for the one-time
+ * import.
  */
 
 type Env = Record<string, string | undefined>;
@@ -62,7 +67,6 @@ function withDefaults(env: Env): Env {
     KEYCLOAK_CLIENT_SECRET: value("KEYCLOAK_CLIENT_SECRET") ?? value("OIDC_CLIENT_SECRET"),
     // Production sends for real; development and tests only log.
     NOTIFICATION_TRANSPORT: value("NOTIFICATION_TRANSPORT") ?? (env.NODE_ENV === "production" ? "live" : "console"),
-    MAIL_FROM_NAME: value("MAIL_FROM_NAME") ?? "Logbook",
   };
 }
 
@@ -125,40 +129,54 @@ const directorySchema = z.discriminatedUnion("DIRECTORY", [
 ]);
 
 /**
- * Notifications. Slack and email are each optional: a channel without its
- * settings is off. Email goes through SMTP or MailerSend.
+ * Notifications. Slack and email are set under Admin › Integrations; this
+ * only says whether the worker sends for real or only logs (development and
+ * tests), and where links in messages point.
  */
-const notificationSchema = z
-  .object({
-    NOTIFICATION_TRANSPORT: z.enum(["live", "console"]),
-    LOGBOOK_BASE_URL: required(httpUrl.transform(withoutTrailingSlash)),
-    SLACK_BOT_TOKEN: optional(z.string().startsWith("xoxb-", "must be a Slack bot token (xoxb-…)")),
-    /** The Slack channel for one post per new entry. */
-    SLACK_CHANNEL_ID: optional(z.string().regex(/^[CG][A-Z0-9]{6,}$/, "must be a Slack channel ID (C…), not a name")),
-    SMTP_URL: optional(z.url({ protocol: /^smtps?$/, error: "must be an smtp:// or smtps:// URL" })),
-    MAILERSEND_API_TOKEN: optional(z.string().min(1)),
-    MAIL_FROM: optional(z.email()),
-    MAIL_FROM_NAME: requiredString(),
-  })
-  .refine((env) => !(env.SMTP_URL && env.MAILERSEND_API_TOKEN), {
-    message: "set either SMTP_URL or MAILERSEND_API_TOKEN, not both",
-    path: ["MAILERSEND_API_TOKEN"],
-  })
-  .refine((env) => !(env.SMTP_URL || env.MAILERSEND_API_TOKEN) || env.MAIL_FROM, {
-    message: "is required to send email",
-    path: ["MAIL_FROM"],
-  });
+const notificationModeSchema = z.object({
+  NOTIFICATION_TRANSPORT: z.enum(["live", "console"], { error: 'must be "live" or "console"' }),
+});
+const notificationSchema = notificationModeSchema.extend({
+  LOGBOOK_BASE_URL: required(httpUrl.transform(withoutTrailingSlash)),
+});
 
-/** The webhook: off until WEBHOOK_URL is set; then the signing secret is required. */
-const webhookSchema = z
-  .object({
-    WEBHOOK_URL: optional(httpUrl),
-    WEBHOOK_SECRET: optional(z.string().min(16, "must be at least 16 characters")),
-  })
-  .refine((env) => !env.WEBHOOK_URL || env.WEBHOOK_SECRET, {
-    message: "is required with WEBHOOK_URL",
-    path: ["WEBHOOK_SECRET"],
-  });
+/**
+ * The key that seals the secrets of the integrations (src/lib/integrations/crypto.ts).
+ * The web process requires BETTER_AUTH_SECRET (authSchema); the worker, the
+ * `migrate` service and the operator command work without it, because the
+ * Compose files of earlier versions passed it to `web` only: they then cannot
+ * read or store those secrets.
+ */
+const sealingSchema = z.object({
+  BETTER_AUTH_SECRET: optional(z.string().min(32, "must be at least 32 characters")),
+});
+
+/**
+ * Variables that versions before the Integrations page read for Slack, email,
+ * and the webhook. Each process copies them into the database once
+ * (src/lib/integrations/moved-variables.ts); afterwards they are ignored.
+ */
+export const MOVED_VARIABLES = [
+  "SLACK_BOT_TOKEN",
+  "SLACK_CHANNEL_ID",
+  "SMTP_URL",
+  "MAILERSEND_API_TOKEN",
+  "MAIL_FROM",
+  "MAIL_FROM_NAME",
+  "WEBHOOK_URL",
+  "WEBHOOK_SECRET",
+] as const;
+export type MovedVariable = (typeof MOVED_VARIABLES)[number];
+
+/** The moved variables that are set, with their values trimmed. Blank values count as unset. */
+export function movedVariables(env: Env = process.env): Partial<Record<MovedVariable, string>> {
+  const values: Partial<Record<MovedVariable, string>> = {};
+  for (const name of MOVED_VARIABLES) {
+    const value = env[name]?.trim();
+    if (value) values[name] = value;
+  }
+  return values;
+}
 
 /** The release version, e.g. "0.2.0". Release images set it; images built from source have none. */
 const versionSchema = z.object({
@@ -194,7 +212,8 @@ export type AuthConfig = z.infer<typeof authSchema>;
 export type DirectoryConfig = z.infer<typeof directorySchema>;
 export type KeycloakDirectoryConfig = Extract<DirectoryConfig, { DIRECTORY: "keycloak" }>;
 export type NotificationConfig = z.infer<typeof notificationSchema>;
-export type WebhookConfig = z.infer<typeof webhookSchema>;
+export type NotificationModeConfig = z.infer<typeof notificationModeSchema>;
+export type SealingConfig = z.infer<typeof sealingSchema>;
 export type VersionConfig = z.infer<typeof versionSchema>;
 export type UpdaterConfig = z.infer<typeof updaterSchema>;
 export type ErrorReportingConfig = z.infer<typeof errorReportingSchema>;
@@ -229,8 +248,13 @@ export function parseNotificationConfig(env: Env = process.env): NotificationCon
   return parse(notificationSchema, env);
 }
 
-export function parseWebhookConfig(env: Env = process.env): WebhookConfig {
-  return parse(webhookSchema, env);
+/** Only whether messages are sent or logged: the test buttons and `cli settings test` need no base URL. */
+export function parseNotificationModeConfig(env: Env = process.env): NotificationModeConfig {
+  return parse(notificationModeSchema, env);
+}
+
+export function parseSealingConfig(env: Env = process.env): SealingConfig {
+  return parse(sealingSchema, env);
 }
 
 export function parseVersionConfig(env: Env = process.env): VersionConfig {
@@ -262,14 +286,14 @@ export function validateWebConfig(env: Env = process.env): void {
 
 /** Validates every variable the worker needs. */
 export function validateWorkerConfig(env: Env = process.env): void {
-  validate([databaseSchema, directorySchema, notificationSchema, webhookSchema, errorReportingSchema], env);
+  validate([databaseSchema, directorySchema, notificationSchema, sealingSchema, errorReportingSchema], env);
 }
 
 let databaseConfig: DatabaseConfig | undefined;
 let authConfig: AuthConfig | undefined;
 let directoryConfig: DirectoryConfig | undefined;
 let notificationConfig: NotificationConfig | undefined;
-let webhookConfig: WebhookConfig | undefined;
+let sealingConfig: SealingConfig | undefined;
 let versionConfig: VersionConfig | undefined;
 let updaterConfig: UpdaterConfig | undefined;
 let errorReportingConfig: ErrorReportingConfig | undefined;
@@ -294,9 +318,9 @@ export function getNotificationConfig(): NotificationConfig {
   return notificationConfig;
 }
 
-export function getWebhookConfig(): WebhookConfig {
-  webhookConfig ??= parseWebhookConfig();
-  return webhookConfig;
+export function getSealingConfig(): SealingConfig {
+  sealingConfig ??= parseSealingConfig();
+  return sealingConfig;
 }
 
 export function getVersionConfig(): VersionConfig {

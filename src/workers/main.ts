@@ -1,13 +1,7 @@
 import { hostname } from "node:os";
 import * as Sentry from "@sentry/node";
 import { PgBoss } from "pg-boss";
-import {
-  getDatabaseConfig,
-  getErrorReportingConfig,
-  getNotificationConfig,
-  getWebhookConfig,
-  validateWorkerConfig,
-} from "@/lib/config";
+import { getDatabaseConfig, getErrorReportingConfig, getNotificationConfig, validateWorkerConfig } from "@/lib/config";
 import { getDb, getPool } from "@/lib/db/client";
 import { createOutageWatch, waitForDatabase } from "@/lib/db/outage";
 import { envValue } from "@/lib/env";
@@ -22,11 +16,13 @@ import {
   QUEUES,
   REMINDERS_CRON,
 } from "@/lib/jobs/queues";
+import { importMovedVariables, logMovedVariables } from "@/lib/integrations/moved-variables";
+import { createIntegrationsRuntime } from "@/lib/integrations/runtime";
+import { currentSealingKey } from "@/lib/integrations/service";
 import { logger } from "@/lib/logger";
 import { retrySlackLookups, startDispatcher } from "@/lib/notifications/dispatch";
 import { notifyLostAccess, recordReminders } from "@/lib/notifications/notify";
 import { refreshReadiness } from "@/lib/process/commands";
-import { channelModes, createTransports } from "@/lib/notifications/transports";
 import { handleBossErrors } from "./boss-errors";
 import { DEFAULT_HEARTBEAT_FILE, startHeartbeat } from "./heartbeat";
 import { setUpWebhookJobs } from "./webhook-jobs";
@@ -50,6 +46,18 @@ async function main() {
   });
   handleBossErrors(boss, outage, (error) => Sentry.captureException(error));
   await boss.start();
+
+  // Slack, email, and the webhook come from Admin › Integrations. Variables
+  // of earlier versions are copied there once; see moved-variables.ts.
+  const key = currentSealingKey();
+  logMovedVariables(await importMovedVariables(getDb(), { key }));
+  const notificationConfig = getNotificationConfig();
+  const integrations = createIntegrationsRuntime({
+    db: getDb,
+    key,
+    mode: notificationConfig.NOTIFICATION_TRANSPORT,
+    baseUrl: notificationConfig.LOGBOOK_BASE_URL,
+  });
 
   // The Keycloak directory syncs every 15 minutes and once at startup, so a
   // fresh deployment has people right away. pg-boss keeps schedules in the
@@ -75,15 +83,12 @@ async function main() {
   // Notifications: readiness, lost access, and due Slack lookups every few
   // minutes, reminders at 09:00 on working days. Delivery keys make repeated
   // runs harmless, so the reminder job also runs once at startup.
-  const notificationConfig = getNotificationConfig();
-  const transports = createTransports(notificationConfig);
-  const channels = channelModes(transports);
   await boss.createQueue(QUEUES.proposalWatch, { retryLimit: 1, retryDelay: 60, expireInSeconds: 240 });
   await boss.schedule(QUEUES.proposalWatch, PROPOSAL_WATCH_CRON, {}, { tz: SERVER_TIME_ZONE });
   await boss.work(QUEUES.proposalWatch, async () => {
     await refreshReadiness(getDb(), new Date());
     await notifyLostAccess(getDb(), new Date());
-    await retrySlackLookups(getDb(), transports, new Date());
+    await retrySlackLookups(getDb(), await integrations.transports(), new Date());
   });
   await boss.createQueue(QUEUES.reminders, { retryLimit: 3, retryDelay: 300, expireInSeconds: 600 });
   await boss.schedule(QUEUES.reminders, REMINDERS_CRON, {}, { tz: SERVER_TIME_ZONE });
@@ -93,22 +98,22 @@ async function main() {
   });
   await boss.send(QUEUES.reminders, {});
 
-  channels.webhook = await setUpWebhookJobs(boss, {
-    config: getWebhookConfig(),
+  await setUpWebhookJobs(boss, {
+    webhook: integrations.webhook,
     baseUrl: notificationConfig.LOGBOOK_BASE_URL,
     db: getDb,
   });
 
-  const stopDispatcher = startDispatcher({ db: getDb(), transports, intervalMs: DISPATCH_INTERVAL_MS, outage });
+  const stopDispatcher = startDispatcher({ db: getDb(), transports: integrations.transports, intervalMs: DISPATCH_INTERVAL_MS, outage });
 
   const stopHeartbeat = startHeartbeat({
     db: getDb(),
     workerId: hostname(),
     file: envValue("WORKER_HEARTBEAT_FILE") ?? DEFAULT_HEARTBEAT_FILE,
-    channels,
+    channels: integrations.channels,
     outage,
   });
-  logger.info({ directory: directory.kind, channels }, "worker started");
+  logger.info({ directory: directory.kind, channels: integrations.channels() }, "worker started");
 
   let stopping = false;
   const shutdown = async (signal: string) => {
