@@ -178,14 +178,13 @@ admin page shows the worker's last heartbeat.
 - **Upgrades**: read the release notes of every release since yours and
   take their steps. Back up the database first: migrations only move
   forward. `migrate` applies new migrations before `web` and `worker` start.
-  In `/srv/logbook`, run `git pull` (the newest release's `compose.yaml`),
-  then install the release with the [update button](#the-update-button), or
-  set `LOGBOOK_VERSION` in `.env` and run
-  `docker compose up -d --pull always`. A server that still has the values of
-  Slack, email, and the webhook only in `.env` runs 0.3.3 with its own
-  Compose file once before a newer release: 0.3.3 copies them into the
-  database. Then the lines can go from `.env`. After going back to 0.3.3, an
-  admin enters the webhook's URL again.
+  A server that still has the values of Slack, email, and the webhook only in
+  `.env` first runs 0.3.3 once, with its own Compose file: it copies them into
+  the database, and the lines can go from `.env`. In `/srv/logbook`, run
+  `git pull` (the newest release's `compose.yaml`), then install the release
+  with the [update button](#the-update-button), or set `LOGBOOK_VERSION` in
+  `.env` and run `docker compose up -d --pull always`. After going back to
+  0.3.3, an admin enters the webhook's URL again.
 
 ## Settings from the command line
 

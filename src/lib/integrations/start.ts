@@ -14,15 +14,16 @@ export async function sealWebhookUrl(db: Database, key: SealingKey): Promise<boo
     if (typeof webhook.url !== "string") return false;
     const url = { sealed: seal(key, SECRET_FIELDS.webhookUrl, webhook.url), hint: urlHint(webhook.url) };
     await tx.update(appSetting).set({ value: { ...webhook, url } }).where(eq(appSetting.key, "webhook"));
+    logger.info("the saved webhook URL is now encrypted");
     return true;
   });
 }
 
-/** Run by each process that starts with the key (web, worker). A failure is logged: a plain URL still works. */
+/** For the web process. A failure is only logged: the worker seals it too, or does not start. */
 export async function sealAtStart(): Promise<void> {
   try {
     const key = currentSealingKey();
-    if (key && (await sealWebhookUrl(getDb(), key))) logger.info("the saved webhook URL is now encrypted");
+    if (key) await sealWebhookUrl(getDb(), key);
   } catch (error) {
     logger.warn({ error: errorMessage(error) }, "could not encrypt the saved webhook URL");
   }

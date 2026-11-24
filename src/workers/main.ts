@@ -18,7 +18,7 @@ import {
 } from "@/lib/jobs/queues";
 import { createIntegrationsRuntime } from "@/lib/integrations/runtime";
 import { currentSealingKey } from "@/lib/integrations/service";
-import { sealAtStart } from "@/lib/integrations/start";
+import { sealWebhookUrl } from "@/lib/integrations/start";
 import { logger } from "@/lib/logger";
 import { retrySlackLookups, startDispatcher } from "@/lib/notifications/dispatch";
 import { notifyLostAccess, recordReminders } from "@/lib/notifications/notify";
@@ -48,11 +48,12 @@ async function main() {
   await boss.start();
 
   // Slack, email, and the webhook come from Admin › Integrations.
-  await sealAtStart();
+  const key = currentSealingKey();
+  if (key) await sealWebhookUrl(getDb(), key);
   const notificationConfig = getNotificationConfig();
   const integrations = createIntegrationsRuntime({
     db: getDb,
-    key: currentSealingKey(),
+    key,
     mode: notificationConfig.NOTIFICATION_TRANSPORT,
     baseUrl: notificationConfig.LOGBOOK_BASE_URL,
   });
