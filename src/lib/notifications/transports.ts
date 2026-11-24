@@ -206,7 +206,8 @@ export function createSmtpTransport(
   const transporter = createTransport({
     host: options.host,
     port: options.port,
-    // `tls`: TLS from the start (465); `starttls`: upgrade, or fail (587); `none`: never.
+    // `tls`: TLS from the start (465); `starttls`: upgrade, or fail (587);
+    // `auto`: upgrade when the server offers it; `none`: never.
     secure: options.security === "tls",
     requireTLS: options.security === "starttls",
     ignoreTLS: options.security === "none",

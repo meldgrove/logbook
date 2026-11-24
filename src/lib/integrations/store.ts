@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database, Transaction } from "@/lib/db/client";
 import { appSetting } from "@/lib/db/schema";
@@ -108,28 +108,31 @@ const STORED_SCHEMAS = {
 
 export interface LoadedIntegrations {
   stored: StoredIntegrations;
-  /** The settings that have a row: saved or imported, also when off. */
-  present: Set<IntegrationName>;
 }
 
-/** Reads the three rows. With `forUpdate`, locks them for the caller's transaction. */
-export async function loadStored(db: Database | Transaction, options: { forUpdate?: boolean } = {}): Promise<LoadedIntegrations> {
-  const query = db
+/**
+ * Makes saves and the import of moved variables wait for each other, also
+ * while a setting has no row yet (FOR UPDATE locks only existing rows).
+ */
+export async function lockIntegrations(tx: Transaction): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('logbook.integrations'))`);
+}
+
+/** Reads the three rows. Writers call `lockIntegrations` in their transaction first. */
+export async function loadStored(db: Database | Transaction): Promise<LoadedIntegrations> {
+  const rows = await db
     .select({ key: appSetting.key, value: appSetting.value })
     .from(appSetting)
     .where(inArray(appSetting.key, [...INTEGRATION_NAMES]));
-  const rows = options.forUpdate ? await query.for("update") : await query;
   const stored = structuredClone(EMPTY);
-  const present = new Set<IntegrationName>();
   for (const row of rows) {
     const name = row.key as IntegrationName;
     const parsed = STORED_SCHEMAS[name].safeParse(row.value);
     if (!parsed.success) continue;
-    present.add(name);
     // A copy: fallbacks of the schema are shared objects.
     (stored as Record<IntegrationName, unknown>)[name] = structuredClone(parsed.data);
   }
-  return { stored, present };
+  return { stored };
 }
 
 /** Saves one setting's row. `updatedById` is the admin, or null for the operator and the import. */

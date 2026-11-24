@@ -19,8 +19,11 @@ export type IntegrationName = (typeof INTEGRATION_NAMES)[number];
 export const EMAIL_PROVIDERS = ["none", "smtp", "mailersend"] as const;
 export type EmailProvider = (typeof EMAIL_PROVIDERS)[number];
 
-/** `tls` on port 465, `starttls` (required) on 587, `none` for a server without TLS. */
-export const SMTP_SECURITY = ["starttls", "tls", "none"] as const;
+/**
+ * `tls` on port 465, `starttls` (required) on 587, `auto` (STARTTLS when the
+ * server offers it, as `smtp://` URLs of earlier versions did), `none` never.
+ */
+export const SMTP_SECURITY = ["starttls", "tls", "auto", "none"] as const;
 export type SmtpSecurity = (typeof SMTP_SECURITY)[number];
 
 export const SLACK_CHANNEL_ID = /^[CG][A-Z0-9]{6,}$/;
@@ -93,7 +96,7 @@ export const smtpInputSchema = strict(
       .min(1, "Enter a port between 1 and 65535.")
       .max(65_535, "Enter a port between 1 and 65535.")
       .default(587),
-    security: z.enum(SMTP_SECURITY, { error: 'Choose "starttls", "tls", or "none".' }).default("starttls"),
+    security: z.enum(SMTP_SECURITY, { error: 'Choose "starttls", "tls", "auto", or "none".' }).default("starttls"),
     username: text(320, "Use at most 320 characters.").default(""),
     password: secret(() => undefined),
     passwordSaved: shown,

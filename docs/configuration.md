@@ -91,7 +91,7 @@ them before each round of sending, so a change needs no restart.
 | Setting | What it holds |
 |---|---|
 | `slack` | The bot token (`xoxb-…`) of a Slack app with the scopes `chat:write`, `users:read`, and `users:read.email`, and the channel ID (`C…`) for one post per new entry. Invite the app to the channel |
-| `email` | SMTP (server, port, `starttls`, `tls`, or `none`, user name, password) or MailerSend (an API token with email sending access), the sender address, and the sender name (default `Logbook`) |
+| `email` | SMTP (server, port, encryption `starttls`, `tls`, `auto`, or `none`, user name, password) or MailerSend (an API token with email sending access), the sender address, and the sender name (default `Logbook`) |
 | `webhook` | The HTTPS endpoint that receives published entries, and its signing secret (at least 16 characters). See [webhook](webhooks.md) |
 
 Earlier versions read these variables; each process that sees one copies it

@@ -106,6 +106,50 @@ describe("saving on the page and with the command", () => {
     expect(JSON.stringify(await rows())).not.toContain(PASSWORD);
   });
 
+  it("asks for the SMTP password again before it would go to another server or travel less protected", async () => {
+    const body = {
+      provider: "smtp",
+      fromAddress: "logbook@example.org",
+      smtp: { host: "mail.example.org", port: 587, security: "starttls", username: "logbook", password: PASSWORD },
+    };
+    await saveIntegration(db, "email", body, amy, KEY);
+    const kept = { ...body, smtp: { ...body.smtp, password: undefined } };
+    const elsewhere = { ...kept, smtp: { ...kept.smtp, host: "mail.attacker.example" } };
+    await expect(saveIntegration(db, "email", elsewhere, amy, KEY)).rejects.toMatchObject({
+      fieldErrors: { "smtp.password": "Enter the password again: the mail server changed." },
+    });
+    // Also while another provider is chosen, which would carry the new server over unchecked.
+    await expect(saveIntegration(db, "email", { ...elsewhere, provider: "none" }, amy, KEY)).rejects.toMatchObject({
+      fieldErrors: { "smtp.password": "Enter the password again: the mail server changed." },
+    });
+    await expect(saveIntegration(db, "email", { ...kept, smtp: { ...kept.smtp, security: "auto" } }, amy, KEY)).rejects.toMatchObject({
+      fieldErrors: { "smtp.password": "Enter the password again: the encryption is weaker now." },
+    });
+    // The same server and protection keep it; a new password or none at all may go anywhere.
+    expect((await saveIntegration(db, "email", { ...kept, smtp: { ...kept.smtp, port: 465, security: "tls" } }, amy, KEY)).view.state).toBe("set");
+    expect((await saveIntegration(db, "email", { ...elsewhere, smtp: { ...elsewhere.smtp, password: "a-new-password-0000" } }, amy, KEY)).view).toMatchObject({
+      smtp: { host: "mail.attacker.example", passwordHint: "…0000" },
+    });
+  });
+
+  it("waits for an import that runs at the same time, also before the setting has a row", async () => {
+    const client = await testDb.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query("select pg_advisory_xact_lock(hashtext('logbook.integrations'))");
+      const save = saveIntegration(db, "slack", { channelId: "C0123456789" }, amy, KEY);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      // What a concurrent import writes while it holds the lock.
+      await client.query("insert into app_setting (key, value) values ('slack', $1)", [
+        JSON.stringify({ botToken: { sealed: "v1.imported.value", hint: "…7f3a" }, channelId: null }),
+      ]);
+      await client.query("commit");
+      expect((await save).view).toMatchObject({ botTokenSaved: true, botTokenHint: "…7f3a", channelId: "C0123456789" });
+    } finally {
+      client.release();
+    }
+  });
+
   it("cannot store a new secret without BETTER_AUTH_SECRET, but changes other fields", async () => {
     await saveIntegration(db, "slack", { botToken: TOKEN }, amy, KEY);
     await expect(saveIntegration(db, "slack", { botToken: "xoxb-other-token-1234" }, amy, null)).rejects.toMatchObject({
@@ -182,7 +226,7 @@ describe("variables that moved out of .env", () => {
   it("are copied once, sealed, with an audit event per setting by the environment", async () => {
     const result = await importMovedVariables(db, { env: OLD, key: KEY });
     expect(result).toEqual({ copied: Object.keys(OLD), kept: [], refused: [], waiting: [] });
-    const views = await integrationViews(db, { key: KEY, leftovers: [], settingsFromEnvironment: false });
+    const views = await integrationViews(db, { key: KEY, leftovers: [], settingsFromEnvironment: false, workerWithoutKey: false });
     expect(views.slack).toMatchObject({ state: "set", botTokenHint: "…7f3a", channelId: "C0123456789" });
     expect(views.email).toMatchObject({
       state: "set",
@@ -270,7 +314,19 @@ describe("the worker", () => {
       webhook: "live",
       movedVariables: [],
       settingsFromEnvironment: false,
+      withoutKey: false,
     });
+  });
+
+  it("says when it has no BETTER_AUTH_SECRET, also without old variables to fall back on", async () => {
+    const runtime = createIntegrationsRuntime({ db: () => db, key: null, mode: "live", baseUrl: "https://logbook.example", env: {} });
+    await saveIntegration(db, "slack", { botToken: TOKEN }, amy, KEY);
+    expect((await runtime.transports()).slack).toBeUndefined();
+    expect(runtime.channels()).toMatchObject({ settingsFromEnvironment: false, withoutKey: true });
+    await db.insert(workerHeartbeat).values({ workerId: "w1", startedAt: new Date(), beatAt: new Date(), channels: runtime.channels() });
+    expect((await integrationViews(db)).slack.warnings).toEqual([
+      'The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it cannot read the secrets saved here. Give it the compose.yaml of this release (docs/deployment.md, "Moved from .env").',
+    ]);
   });
 
   it("sends with the old variables while it has no BETTER_AUTH_SECRET (an older compose.yaml), and says so", async () => {

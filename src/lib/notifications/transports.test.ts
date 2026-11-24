@@ -239,12 +239,14 @@ describe("SMTP", () => {
     });
   });
 
-  it("requires STARTTLS, or never uses TLS, as the security setting says; no login without a user name", async () => {
+  it("requires STARTTLS, uses it when offered, or never uses TLS, as the security setting says; no login without a user name", async () => {
     const { createTransport, created } = fakeNodemailer(async () => ({}));
     createSmtpTransport(SMTP, createTransport);
+    createSmtpTransport({ ...SMTP, security: "auto" }, createTransport);
     createSmtpTransport({ ...SMTP, port: 25, security: "none" }, createTransport);
     expect(created).toMatchObject([
       { port: 587, secure: false, requireTLS: true, ignoreTLS: false, auth: undefined },
+      { port: 587, secure: false, requireTLS: false, ignoreTLS: false, auth: undefined },
       { port: 25, secure: false, requireTLS: false, ignoreTLS: true, auth: undefined },
     ]);
   });

@@ -231,9 +231,11 @@ for one post per new entry (optional; invite the app to it).
 { "botToken": "<bot token>", "channelId": "C0123456789" }
 ```
 
-`email` over SMTP (`security`: `tls` on port 465, `starttls` on 587, or
-`none`). Leave out `username` and `password` for a server without login.
-`fromName` defaults to `Logbook`. `{"provider": "none"}` turns email off.
+`email` over SMTP (`security`: `tls` on port 465, `starttls` on 587,
+`auto` for STARTTLS only when the server offers it, or `none`). Leave out
+`username` and `password` for a server without login. A changed `host`, or
+weaker `security`, needs the password again. `fromName` defaults to
+`Logbook`. `{"provider": "none"}` turns email off.
 
 ```json
 {
@@ -293,14 +295,15 @@ Versions before Admin › Integrations read Slack, email, and the webhook from
   empty, with the page's checks. The audit log names the actor
   `environment`. From then on the database wins and the variables are
   ignored, also after an admin clears a field. An `smtp://` URL becomes
-  STARTTLS (required) on port 587 unless it names another, `smtps://` TLS
-  on 465.
+  `auto` (STARTTLS when the server offers it, as before) on port 587 unless
+  it names another, `smtps://` becomes `tls` on 465.
 - Admin › Integrations, `cli settings list`, and one warning in the log at
-  start name each of them that is still set. Delete them from `.env` then.
+  start name each of them that is still set. Delete them from `.env` once
+  you no longer plan to go back to an earlier version, which reads them.
 - The worker needs `BETTER_AUTH_SECRET` to store and read the secrets. The
   `compose.yaml` of earlier versions passes it to `web` only: with that
-  file, the worker keeps sending with the variables, as before, and
-  Admin › Integrations says so. Take the `compose.yaml` of this release
+  file, the worker keeps sending with the variables, as before, cannot
+  read what is saved on the page, and Admin › Integrations says so. Take the `compose.yaml` of this release
   (`git pull`) and run `docker compose up -d`; the worker then copies them.
 
 ## Backups

@@ -10,14 +10,16 @@ describe("smtpFromUrl", () => {
       username: "user@example.org",
       password: "p@ss",
     });
+    // smtp:// upgraded to TLS only when the server offered it: a relay without STARTTLS keeps working.
     expect(smtpFromUrl("smtp://mail.example.org:2525")).toEqual({
       host: "mail.example.org",
       port: 2525,
-      security: "starttls",
+      security: "auto",
       username: "",
       password: null,
     });
     expect(smtpFromUrl("smtp://relay.internal:25?ignoreTLS=true")?.security).toBe("none");
+    expect(smtpFromUrl("smtp://mail.example.org?requireTLS=true")?.security).toBe("starttls");
   });
 
   it("refuses what is no SMTP URL", () => {

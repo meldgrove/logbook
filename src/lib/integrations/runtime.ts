@@ -89,6 +89,7 @@ export function createIntegrationsRuntime(options: {
         webhook: current?.webhook ? "live" : "off",
         movedVariables: leftovers,
         settingsFromEnvironment: fromEnvironment,
+        withoutKey: !options.key,
       };
     },
   };

@@ -47,4 +47,6 @@ export interface NotificationChannels {
   movedVariables?: string[];
   /** The worker has no BETTER_AUTH_SECRET (an older compose.yaml) and sends with those variables. */
   settingsFromEnvironment?: boolean;
+  /** The worker has no BETTER_AUTH_SECRET, so it cannot read the secrets of Admin › Integrations. */
+  withoutKey?: boolean;
 }

@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { auditActor, environmentImport } from "@/lib/audit/actor";
 import { recordAudit } from "@/lib/audit";
@@ -9,7 +9,7 @@ import { logger } from "@/lib/logger";
 import { seal, secretHint, type SealingKey } from "./crypto";
 import { INPUT_SCHEMAS, mailerSendInputSchema, smtpInputSchema, type IntegrationName, type SmtpSecurity } from "./schemas";
 import { changedFields, MOVED_TO } from "./service";
-import { EMPTY, loadStored, SECRET_FIELDS, writeStored, type Integrations, type StoredIntegrations } from "./store";
+import { EMPTY, loadStored, lockIntegrations, SECRET_FIELDS, writeStored, type Integrations, type StoredIntegrations } from "./store";
 
 /*
  * Versions before Admin › Integrations read Slack, email, and the webhook
@@ -47,7 +47,11 @@ interface Smtp {
   password: string | null;
 }
 
-/** An old SMTP_URL as the page's fields: smtps:// is TLS (465), smtp:// STARTTLS (587). */
+/**
+ * An old SMTP_URL as the page's fields: smtps:// is TLS (465); smtp:// (587)
+ * keeps nodemailer's behavior: STARTTLS when the server offers it (`auto`),
+ * required with `requireTLS=true`, never with `ignoreTLS=true`.
+ */
 export function smtpFromUrl(value: string): Smtp | undefined {
   let url: URL;
   try {
@@ -67,8 +71,13 @@ export function smtpFromUrl(value: string): Smtp | undefined {
   const smtp = {
     host: url.hostname,
     port: url.port ? Number(url.port) : tls ? 465 : 587,
-    // nodemailer's URL option `ignoreTLS=true` never upgraded the connection.
-    security: (tls ? "tls" : url.searchParams.get("ignoreTLS") === "true" ? "none" : "starttls") as SmtpSecurity,
+    security: (tls
+      ? "tls"
+      : url.searchParams.get("ignoreTLS") === "true"
+        ? "none"
+        : url.searchParams.get("requireTLS") === "true"
+          ? "starttls"
+          : "auto") as SmtpSecurity,
     username: decode(url.username),
     password: url.password ? decode(url.password) : null,
   };
@@ -207,14 +216,14 @@ export async function importMovedVariables(
     return result;
   }
   await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('logbook.moved-variables'))`);
+    await lockIntegrations(tx);
     const [row] = await tx.select({ value: appSetting.value }).from(appSetting).where(eq(appSetting.key, RECORD_KEY));
     // A copy: the schema's fallback is one shared object.
     const done: Record<string, Outcome> = { ...recordSchema.parse(row?.value).variables };
     const pending = given.filter((name) => !(name in done));
     if (pending.length === 0) return;
 
-    const { stored } = await loadStored(tx, { forUpdate: true });
+    const { stored } = await loadStored(tx);
     const next = structuredClone(stored);
     const copied = new Map<IntegrationName, MovedVariable[]>();
     for (const name of pending) {

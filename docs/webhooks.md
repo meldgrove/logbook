@@ -19,9 +19,10 @@ edit, a new impact, an addendum, or when a newer decision replaces it. Every
 request carries the whole entry as it is now, so a receiver stores it by
 `entry.id` and replaces what it had. Changes go out within a minute. Every
 night at 02:30 (server time), and right after the webhook is turned on or
-gets a new URL, the worker re-sends any entry whose content differs from what
-the receiver last got; the first run after the webhook is turned on sends
-every entry.
+its URL changes, the worker re-sends any entry whose content differs from
+what was last delivered; the first run after the webhook is turned on sends
+every entry. A new URL gets the entries that change from then on, not the
+ones an earlier URL already received.
 
 ```json
 {

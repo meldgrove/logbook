@@ -18,11 +18,13 @@ import {
   type IntegrationState,
   type IntegrationViews,
   type SlackView,
+  type SmtpSecurity,
   type TestResult,
   type WebhookView,
 } from "./schemas";
 import {
   loadStored,
+  lockIntegrations,
   openStored,
   SECRET_FIELDS,
   writeStored,
@@ -89,6 +91,8 @@ export interface WorkerEnvironment {
   movedVariables: MovedVariable[];
   /** The worker has no BETTER_AUTH_SECRET and sends with the moved variables. */
   settingsFromEnvironment: boolean;
+  /** The worker has no BETTER_AUTH_SECRET, so it cannot read the secrets saved here. */
+  withoutKey: boolean;
 }
 
 /** The latest worker heartbeat's report, or nothing while no worker has reported. */
@@ -102,6 +106,7 @@ export async function workerEnvironment(db: Database): Promise<WorkerEnvironment
   return {
     movedVariables: (row?.channels?.movedVariables ?? []).filter((name): name is MovedVariable => name in MOVED_TO),
     settingsFromEnvironment: row?.channels?.settingsFromEnvironment === true,
+    withoutKey: row?.channels?.withoutKey === true || row?.channels?.settingsFromEnvironment === true,
   };
 }
 
@@ -111,6 +116,7 @@ export interface ViewContext {
   /** Moved variables set for this process or the worker, in a fixed order. */
   leftovers: MovedVariable[];
   settingsFromEnvironment: boolean;
+  workerWithoutKey: boolean;
 }
 
 export async function viewContext(db: Database, env: Record<string, string | undefined> = process.env): Promise<ViewContext> {
@@ -120,6 +126,7 @@ export async function viewContext(db: Database, env: Record<string, string | und
     key: currentSealingKey(),
     leftovers: (Object.keys(MOVED_TO) as MovedVariable[]).filter((name) => seen.has(name)),
     settingsFromEnvironment: worker.settingsFromEnvironment,
+    workerWithoutKey: worker.withoutKey,
   };
 }
 
@@ -130,8 +137,12 @@ function warningsFor(name: IntegrationName, context: ViewContext, unreadable: Un
   const warnings: string[] = [];
   const leftovers = context.leftovers.filter((variable) => MOVED_TO[variable] === name);
   const one = leftovers.length === 1;
-  if (context.settingsFromEnvironment) {
-    const reads = leftovers.length > 0 ? `still sends with ${list(leftovers)} from .env and ignores this page` : "ignores this page";
+  if (context.workerWithoutKey) {
+    const reads = !context.settingsFromEnvironment
+      ? "cannot read the secrets saved here"
+      : leftovers.length > 0
+        ? `still sends with ${list(leftovers)} from .env and ignores this page`
+        : "ignores this page";
     warnings.push(
       `The worker has no BETTER_AUTH_SECRET (the compose.yaml of an earlier version), so it ${reads}. Give it the compose.yaml of this release (docs/deployment.md, "Moved from .env").`,
     );
@@ -249,6 +260,9 @@ function nextSlack(current: StoredSlack, body: unknown, key: SealingKey | null):
   };
 }
 
+/** How well each setting protects the password in transit. */
+const SECURITY_STRENGTH: Record<SmtpSecurity, number> = { tls: 2, starttls: 2, auto: 1, none: 0 };
+
 function nextEmail(current: StoredEmail, body: unknown, key: SealingKey | null): StoredEmail {
   const input = INPUT_SCHEMAS.email.parse(body);
   const next: StoredEmail = {
@@ -269,13 +283,21 @@ function nextEmail(current: StoredEmail, body: unknown, key: SealingKey | null):
   const unreadable = key ? openStored({ ...emptyBut("email", next) }, key).unreadable : [];
   const errors: IntegrationFieldErrors = {};
   if (next.fromAddress && !z.email().safeParse(next.fromAddress).success) errors.fromAddress = "Enter an email address.";
+  // A kept password must not reach another server, or travel less protected,
+  // also not by changing the server while another provider is chosen.
+  const kept = input.smtp.password === undefined && next.smtp.password !== null;
+  if (kept && next.smtp.host !== current.smtp.host) {
+    errors["smtp.password"] = "Enter the password again: the mail server changed.";
+  } else if (kept && SECURITY_STRENGTH[next.smtp.security] < SECURITY_STRENGTH[current.smtp.security]) {
+    errors["smtp.password"] = "Enter the password again: the encryption is weaker now.";
+  }
   if (next.provider !== "none") {
     if (!next.fromAddress) errors.fromAddress = "Enter the sender address.";
     if (next.provider === "smtp") {
       const password = usable(next.smtp.password, SECRET_FIELDS.smtpPassword, unreadable);
       if (!next.smtp.host) errors["smtp.host"] = "Enter the mail server.";
       if (next.smtp.username && !password) {
-        errors["smtp.password"] = next.smtp.password ? UNREADABLE : "Enter the password for this user name.";
+        errors["smtp.password"] ??= next.smtp.password ? UNREADABLE : "Enter the password for this user name.";
       }
       if (!next.smtp.username && next.smtp.password) errors["smtp.username"] = "Enter the user name for this password.";
     } else if (!usable(next.mailersend.token, SECRET_FIELDS.mailerSendToken, unreadable)) {
@@ -345,7 +367,8 @@ export async function saveIntegration(
   if (!parsed.success) throw new IntegrationError(CHECK_FIELDS, fieldErrorsOf(parsed.error));
   const { actorId, payload } = auditActor(actor);
   await db.transaction(async (tx) => {
-    const { stored } = await loadStored(tx, { forUpdate: true });
+    await lockIntegrations(tx);
+    const { stored } = await loadStored(tx);
     const before = stored[name];
     const next = (NEXT[name] as (current: typeof before, body: unknown, key: SealingKey | null) => typeof before)(before, body, key);
     await writeStored(tx, name, next, actorId);
@@ -402,8 +425,9 @@ export async function testEmail(db: Database, input: unknown, key: SealingKey | 
   const parsed = emailTestSchema.safeParse(input);
   if (!parsed.success) throw new IntegrationError(CHECK_FIELDS, fieldErrorsOf(parsed.error));
   const { stored, unreadable, mode, transports } = await transportsNow(db, key);
-  const secrets = unreadable.filter((field) => field.startsWith("email."));
-  if (secrets.length > 0) return { ok: false, message: key ? `${SECRET_LABELS[secrets[0]!]}: ${UNREADABLE}` : NO_KEY };
+  // Only the chosen provider's secret matters.
+  const secret = stored.email.provider === "mailersend" ? SECRET_FIELDS.mailerSendToken : SECRET_FIELDS.smtpPassword;
+  if (stored.email.provider !== "none" && unreadable.includes(secret)) return { ok: false, message: key ? `${SECRET_LABELS[secret]}: ${UNREADABLE}` : NO_KEY };
   if (stored.email.provider === "none" || !transports.email) {
     return { ok: false, message: "Email is not set up: save a provider, its server or API token, and the sender first." };
   }

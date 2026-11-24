@@ -204,6 +204,7 @@ export function SlackForm({ initial }: { initial: SlackView }) {
 const SECURITY_LABELS: Record<SmtpSecurity, string> = {
   starttls: "STARTTLS (usually port 587)",
   tls: "TLS (usually port 465)",
+  auto: "STARTTLS when the server offers it",
   none: "None",
 };
 
