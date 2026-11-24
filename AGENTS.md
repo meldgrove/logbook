@@ -30,8 +30,10 @@ Meldgrove apps, Radix), sonner, pino, Vitest, Playwright.
 - `src/lib/<module>/`: `auth`, `directory` (manual and Keycloak directory),
   `db`, `entries`, `process`, `calendar`, `audit`, `health`, `jobs`,
   `security`, `notifications`, `measures`, `webhooks`, `csv-import`,
-  `updates` (the updater's API for the update button), `integrations`
-  (Slack, email, and the webhook: Admin › Integrations and `cli settings`).
+  `updates` (who may call the update routes; the routes themselves come from
+  `@meldgrove/ui/updates/server`, which asks the updater with
+  `UPDATER_TOKEN`), `integrations` (Slack, email, and the webhook: Admin ›
+  Integrations and `cli settings`).
 - `src/workers/`: the pg-boss worker. `src/scripts/`: migrate, directory
   sync, and the CSV import. `src/cli/`: the operator command (`cli` in the
   image). All are bundled with esbuild into `dist/`.

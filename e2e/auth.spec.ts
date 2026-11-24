@@ -58,7 +58,7 @@ test("a member of the Keycloak admin group sees the admin area", async ({ page }
   // with the reason the route gives.
   const updateButton = page.locator("[data-update-state]");
   await expect(updateButton).toHaveAttribute("data-update-state", "unreachable");
-  await expect(updateButton).toHaveAccessibleName(/^The update service at .+ cannot be reached/);
+  await expect(updateButton).toHaveAccessibleName(/^The update service is not reachable/);
   await expect(page.getByRole("heading", { name: "Updates", exact: true })).toBeVisible();
   await expect(page.getByText("Automatic updates need the updater service from compose.yaml")).toBeVisible();
   await expectAccessible(page);

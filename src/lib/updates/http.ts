@@ -1,18 +1,18 @@
-import type { z } from "zod";
+import { createUpdatesHandler } from "@meldgrove/ui/updates/server";
 import { getCurrentAdmin } from "@/lib/auth/session";
-import { getAuthConfig } from "@/lib/config";
+import { getAuthConfig, getUpdaterConfig, getVersionConfig } from "@/lib/config";
+import { logger } from "@/lib/logger";
 import { isSameOrigin } from "@/lib/security/origin";
-import type { UpdatesReply } from "./service";
 
-/* Shared by the route handlers under /api/admin/updates. */
+/*
+ * Shared by the route handlers under /api/admin/updates. The package asks the
+ * updater at UPDATER_URL with UPDATER_TOKEN and answers as the update button
+ * and the Updates card expect; Logbook only decides who may ask.
+ */
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
-export function updatesResponse(reply: UpdatesReply): Response {
-  return Response.json(reply.body, { status: reply.httpStatus, headers: NO_STORE });
-}
-
-export function errorResponse(status: number, error: string): Response {
+function errorResponse(status: number, error: string): Response {
   return Response.json({ error }, { status, headers: NO_STORE });
 }
 
@@ -29,14 +29,13 @@ export async function refuseUnlessAdmin(request: Request): Promise<Response | nu
   return null;
 }
 
-/** The JSON body, checked with `schema`; null when it is missing, not JSON, or invalid. */
-export async function readBody<T extends z.ZodType>(request: Request, schema: T): Promise<z.infer<T> | null> {
-  let json: unknown;
-  try {
-    json = await request.json();
-  } catch {
-    return null;
-  }
-  const parsed = schema.safeParse(json);
-  return parsed.success ? parsed.data : null;
-}
+/** The four update routes; reads this process's configuration on each request. */
+export const updates = createUpdatesHandler(() => {
+  const { UPDATER_URL, UPDATER_TOKEN } = getUpdaterConfig();
+  return {
+    url: UPDATER_URL,
+    token: UPDATER_TOKEN,
+    appVersion: getVersionConfig().APP_VERSION ?? null,
+    logger,
+  };
+});

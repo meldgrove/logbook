@@ -128,6 +128,12 @@ outage.
 | Variable | Default | Value |
 |---|---|---|
 | `UPDATER_URL` | `http://updater:8080` | Address of the `updater` service's API, which the update button and the Updates card on the admin page ask. Under `compose.yaml`, an empty value also means the default; empty switches both off only where Logbook reads its environment directly, without Compose |
+| `UPDATER_TOKEN` | none | Recommended: the token Logbook sends with each request to the updater, which then refuses requests without it. Make one with `openssl rand -hex 32` |
+
+`compose.yaml` passes `UPDATER_TOKEN` to Logbook and, as `API_TOKEN`, to the
+updater. Without it, anything that reaches the updater on the Docker network
+could install an offered update or switch the channel
+([protect the update service](deployment.md#protect-the-update-service)).
 
 The `updater` service itself takes `UPDATE_COOLDOWN` and `UPDATE_WINDOW`
 (see [automatic updates](deployment.md#automatic-updates)), and

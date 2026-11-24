@@ -197,6 +197,12 @@ const updaterSchema = z.object({
     (value) => (value === undefined ? DEFAULT_UPDATER_URL : typeof value === "string" && value.trim() === "" ? null : value),
     httpUrl.transform(withoutTrailingSlash).nullable(),
   ),
+  /**
+   * Sent to the updater with each request (recommended). compose.yaml gives
+   * the updater the same value as API_TOKEN, and it then refuses requests
+   * without it. Unset: no token.
+   */
+  UPDATER_TOKEN: optional(z.string().regex(/^[\x21-\x7e]+$/, "must be visible ASCII characters without spaces (openssl rand -hex 32)")),
 });
 
 /** Error reporting to Sentry: off until SENTRY_DSN is set. Without SENTRY_RELEASE, the release is named after APP_VERSION. */
