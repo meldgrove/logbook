@@ -161,7 +161,11 @@ date format is `DD.MM.YYYY`.
 | `MIGRATIONS_DIR` | `drizzle` | Folder with the SQL migrations |
 
 Docker Compose uses `LOGBOOK_VERSION` to select the image tag. It still
-accepts `LOGBUCH_VERSION` when `LOGBOOK_VERSION` is unset. With automatic
-updates, the server writes each version it installs into `LOGBOOK_VERSION`.
+accepts `LOGBUCH_VERSION` when `LOGBOOK_VERSION` is unset. Without either,
+Compose stops with "unable to get image 'ghcr.io/meldgrove/logbook:set
+LOGBOOK_VERSION in .env …': invalid reference format" before it starts
+anything.
+With automatic updates, the server writes each version it installs into
+`LOGBOOK_VERSION`.
 `LOGBOOK_PORT` (default 3000) is the host port that `compose.yaml` publishes
 `web` on, on `127.0.0.1` only.

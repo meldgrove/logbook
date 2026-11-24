@@ -12,7 +12,12 @@
 # URL and LOGBOOK_BASE_URL to the domain. Set the variables in the resource's
 # environment view.
 
-x-image: &image ghcr.io/meldgrove/logbook:${LOGBOOK_VERSION:-${LOGBUCH_VERSION:?set LOGBOOK_VERSION in .env to a release, e.g. 0.2.0}}
+# LOGBUCH_VERSION of an older .env stands in for LOGBOOK_VERSION. Without
+# either, the tag is the text after :- below, which no image can have:
+# Compose stops with "unable to get image ...: invalid reference format"
+# before it starts anything. No :? inside: Docker Compose 2.x would then
+# require the old name even next to the new.
+x-image: &image ghcr.io/meldgrove/logbook:${LOGBOOK_VERSION:-${LOGBUCH_VERSION:-set LOGBOOK_VERSION in .env to a release, e.g. 0.2.0}}
 
 x-app-environment: &app-environment
   DATABASE_URL: ${DATABASE_URL:?}
@@ -28,7 +33,9 @@ x-app-environment: &app-environment
   UPDATER_TOKEN: ${UPDATER_TOKEN:-}
 
 x-directory-environment: &directory-environment
-  LOGBOOK_BASE_URL: ${LOGBOOK_BASE_URL:-${LOGBUCH_BASE_URL:?set LOGBOOK_BASE_URL to the public URL}}
+  # LOGBUCH_BASE_URL of an older .env stands in. Without either, web and
+  # worker do not start and name LOGBOOK_BASE_URL.
+  LOGBOOK_BASE_URL: ${LOGBOOK_BASE_URL:-${LOGBUCH_BASE_URL:-}}
   OIDC_ISSUER: ${OIDC_ISSUER:?}
   OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?}
   OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?}
